@@ -50,3 +50,53 @@ window.clearOverlay = () => {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
+
+// Dessine un cercle de densité
+window.drawDensityCircle = (centerX, centerY, radius, color) => {
+    const img = document.getElementById("backgroundImage");
+    const canvas = document.getElementById("overlayCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Ratio d'échelle (image affichée → image réelle)
+    const scaleX = img.clientWidth / img.naturalWidth;
+    const scaleY = img.clientHeight / img.naturalHeight;
+
+    // Ajuster les coordonnées
+    const x = centerX * scaleX;
+    const y = centerY * scaleY;
+    const r = radius * Math.min(scaleX, scaleY);
+
+    // Dessiner le cercle rempli
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Ajouter un contour semi-transparent pour mieux voir les cercles
+    ctx.strokeStyle = color.replace(/[\d.]+\)$/, '0.9)'); // Augmenter l'opacité du contour
+    ctx.lineWidth = 2;
+    ctx.stroke();
+};
+
+// Dessine une boîte autour d'un mot
+window.drawWordBox = (x, y, width, height, borderColor) => {
+    const img = document.getElementById("backgroundImage");
+    const canvas = document.getElementById("overlayCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Ratio d'échelle (image affichée → image réelle)
+    const scaleX = img.clientWidth / img.naturalWidth;
+    const scaleY = img.clientHeight / img.naturalHeight;
+
+    // Ajuster les coordonnées et dimensions
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
+    const scaledWidth = width * scaleX;
+    const scaledHeight = height * scaleY;
+
+    // Dessiner le rectangle
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(scaledX, scaledY, scaledWidth, scaledHeight);
+};
+

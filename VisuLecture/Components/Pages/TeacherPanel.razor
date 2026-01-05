@@ -15,6 +15,7 @@
 @inject AppDbContext Db
 @inject IWebHostEnvironment Env
 @inject CalibrationService CalibrationService
+@inject NotificationService NotificationService
 
 <div class="teacher-panel-container">
     
@@ -989,7 +990,8 @@
             string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
             resultats.Clear();
 
-            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "'", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "-", "_", "—", "…", "/", "\\", "|" };
+            // Caractères spéciaux à retirer (SANS apostrophes et tirets)
+            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
 
             using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
             using var pix = Pix.LoadFromMemory(imageBytes);
@@ -1014,7 +1016,11 @@
                     string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
                     float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
 
-                    if (string.IsNullOrEmpty(mot) || mot.Any(c => symbols.Contains(c.ToString())))
+                    // Nettoyer le mot en retirant tous les caractères spéciaux
+                    string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
+                    
+                    // Ignorer si le mot est vide après nettoyage ou ne contient que des symboles
+                    if (string.IsNullOrWhiteSpace(motNettoye))
                         continue;
 
                     if (prevRight > 0)
@@ -1029,7 +1035,7 @@
 
                     resultats.Add(new ResultatOCR
                     {
-                        Mot = mot,
+                        Mot = motNettoye,
                         X = (int)(rect.X1 - (espace / 2f)),
                         Y = rect.Y1,
                         Largeur = (int)(rect.Width + espace),
@@ -1099,6 +1105,9 @@
         Students = new List<Student>(Db.Students.AsEnumerable());
         TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
         bool running = IsProcessRunning("BeamEyeTracker");
+        
+        // Nettoyage automatique des dossiers orphelins
+        CleanupOrphanedTextFolders();
     }
 
     private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
@@ -1120,6 +1129,60 @@
         BeamStatus = "Arrêté";
         InvokeAsync(StateHasChanged);
         return false;
+    }
+    
+    private void CleanupOrphanedTextFolders()
+    {
+        try
+        {
+            string textImgPath = Path.Combine("wwwroot", "textImg");
+            
+            if (!Directory.Exists(textImgPath))
+            {
+                Console.WriteLine("Dossier textImg introuvable.");
+                return;
+            }
+            
+            // Récupérer tous les IDs valides depuis la base de données
+            var validIds = Db.TextRecords.Select(tr => tr.Id).ToHashSet();
+            
+            // Parcourir tous les sous-dossiers de textImg
+            var directories = Directory.GetDirectories(textImgPath);
+            int deletedCount = 0;
+            
+            foreach (var directory in directories)
+            {
+                string folderName = Path.GetFileName(directory);
+                
+                // Vérifier si le dossier correspond à un ID dans la DB
+                if (!validIds.Contains(folderName))
+                {
+                    try
+                    {
+                        Directory.Delete(directory, true); // true = récursif
+                        deletedCount++;
+                        Console.WriteLine($"Dossier orphelin supprimé : {folderName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Erreur lors de la suppression de {folderName} : {ex.Message}");
+                    }
+                }
+            }
+            
+            if (deletedCount > 0)
+            {
+                Console.WriteLine($"Nettoyage terminé : {deletedCount} dossier(s) orphelin(s) supprimé(s).");
+            }
+            else
+            {
+                Console.WriteLine("Aucun dossier orphelin détecté.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du nettoyage des dossiers orphelins : {ex.Message}");
+        }
     }
     
     void StartBeam()
@@ -1190,16 +1253,111 @@
         Db.SaveChanges();
     }
 
-    private Task DeleteText(TextRecord textR)
+    private async Task DeleteText(TextRecord textR)
     {
-        TextRecords.Remove(textR);
-        InvokeAsync(StateHasChanged);
-        Db.TextRecords.Remove(textR);
-        Db.SaveChanges();
+        // Compter les enregistrements (readings) associés à ce texte
+        var relatedReadings = await Db.Readings
+            .Where(r => r.TextId == textR.Id)
+            .ToListAsync();
+        int readingsCount = relatedReadings.Count;
         
-        Directory.Delete("wwwroot/" + textR.FilePath, true);
+        // Construire le message de confirmation
+        string message;
+        if (readingsCount > 0)
+        {
+            message = $"⚠️ ATTENTION ⚠️\n\n" +
+                     $"La suppression de ce texte entraînera également la suppression de :\n\n" +
+                     $"• {readingsCount} enregistrement(s) de lecture d'élèves\n" +
+                     $"• Toutes les données de suivi oculaire associées\n" +
+                     $"• Le dossier et les fichiers du texte\n\n" +
+                     $"Cette action est IRRÉVERSIBLE.\n\n" +
+                     $"Voulez-vous vraiment continuer ?";
+        }
+        else
+        {
+            message = $"Voulez-vous vraiment supprimer le texte \"{textR.Name}\" ?\n\n" +
+                     $"Le dossier et les fichiers associés seront également supprimés.";
+        }
         
-        return Task.CompletedTask;
+        // Afficher la boîte de dialogue de confirmation
+        var confirmed = await DialogService.Confirm(
+            message,
+            "Confirmation de suppression",
+            new ConfirmOptions 
+            { 
+                OkButtonText = "Oui, supprimer",
+                CancelButtonText = "Annuler",
+                CloseDialogOnOverlayClick = false
+            }
+        );
+        
+        if (confirmed == true)
+        {
+            try
+            {
+                // Supprimer d'abord les enregistrements associés
+                if (readingsCount > 0)
+                {
+                    Db.Readings.RemoveRange(relatedReadings);
+                    
+                    // Supprimer les dossiers de données pour chaque reading
+                    foreach (var reading in relatedReadings)
+                    {
+                        string recordPath = Path.Combine("records", reading.Id);
+                        if (Directory.Exists(recordPath))
+                        {
+                            try
+                            {
+                                Directory.Delete(recordPath, true);
+                                Console.WriteLine($"Dossier de données supprimé : {recordPath}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Erreur lors de la suppression du dossier {recordPath} : {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                
+                // Supprimer le TextRecord de la base de données
+                Db.TextRecords.Remove(textR);
+                await Db.SaveChangesAsync();
+                
+                // Supprimer le dossier du texte
+                string textPath = Path.Combine("wwwroot", textR.FilePath);
+                if (Directory.Exists(textPath))
+                {
+                    Directory.Delete(textPath, true);
+                    Console.WriteLine($"Dossier texte supprimé : {textPath}");
+                }
+                
+                // Mettre à jour l'interface
+                TextRecords.Remove(textR);
+                await InvokeAsync(StateHasChanged);
+                
+                // Notification de succès
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Suppression réussie",
+                    Detail = readingsCount > 0 
+                        ? $"Texte et {readingsCount} enregistrement(s) supprimé(s)."
+                        : "Texte supprimé avec succès.",
+                    Duration = 4000
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur lors de la suppression : {ex.Message}");
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Erreur de suppression",
+                    Detail = $"Impossible de supprimer le texte : {ex.Message}",
+                    Duration = 5000
+                });
+            }
+        }
     }
 
     private void OnChangeTextContent(string args)

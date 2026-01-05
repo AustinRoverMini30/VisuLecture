@@ -4,10 +4,13 @@
 @using VisuLecture.Components.Controller
 @using VisuLecture.Components.Model
 @using Microsoft.EntityFrameworkCore
+@using CsvHelper
+@using CsvHelper.Configuration
 @inject NotificationService NotificationService
 @inject IJSRuntime JS
 @inject AppDbContext Db
 @inject NavigationManager Navigation
+@inject IWebHostEnvironment Env
 
 <div class="data-viewer-container">
     
@@ -31,6 +34,47 @@
     <!-- Controls Section -->
     <section class="controls-section">
         <div class="section-container">
+            <!-- Statistiques Section -->
+            @if (resultats != null)
+            {
+                <div class="stats-card">
+                    <div class="stats-header">
+                        <RadzenIcon Icon="analytics" style="margin-right: 10px; font-size: 1.5rem;" />
+                        <h3 class="stats-title">Statistiques de lecture</h3>
+                    </div>
+                    <div class="stats-content">
+                        <div class="stat-item">
+                            <div class="stat-label">Total mots</div>
+                            <div class="stat-value">@totalMots</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Mots lus</div>
+                            <div class="stat-value stat-success">@motsLus</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Mots non lus</div>
+                            <div class="stat-value stat-warning">@motsNonLus</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Pourcentage lu</div>
+                            <div class="stat-value">@pourcentageLu.ToString("0.00")%</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Moyenne fixations / mot</div>
+                            <div class="stat-value">@moyenneFixations.ToString("0.00")</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Durée moyenne fixation</div>
+                            <div class="stat-value">@moyenneDureeFixation.ToString("0.000") s</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Vitesse de lecture</div>
+                            <div class="stat-value stat-primary">@vitesseLecture mots/min</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            
             <div class="controls-card">
                 <div class="controls-header">
                     <RadzenIcon Icon="tune" style="margin-right: 10px; font-size: 1.5rem;" />
@@ -46,6 +90,16 @@
                     <div class="control-group">
                         <RadzenCheckBox @bind-Value=@isAffineVisible Change="@UpdateOverlay" TValue="bool" />
                         <RadzenLabel Text="Données brutes" class="control-label red-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isDensityVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Ronds de densité" class="control-label purple-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isWordBoxVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Boîtes autour des mots" class="control-label cyan-label" />
                     </div>
                     
                     <div class="control-group">
@@ -80,21 +134,63 @@
 </div>
 
 @code {
+    // ------------------- CLASSES -------------------
+    public record MotCsv(string mot, double? x, double? y, double? largeur, double? hauteur, int ligne, string espace, double? confiance);
+    public record PointCsv(double timestamp, double x, double y, double jump);
+
+    public class Resultat
+    {
+        public string mot { get; set; }
+        public double x { get; set; }
+        public double y { get; set; }
+        public double largeur { get; set; }
+        public double hauteur { get; set; }
+        public int nbMot { get; set; }
+        public int retourArriere { get; set; }
+        public double tempsFixation { get; set; }
+        public int ligne { get; set; }
+    }
+
+    // ------------------- VARIABLES -------------------
     private List<(double x, double y)> points = new();
     private List<(double x, double y)> pointsRaw = new();
     private bool isAffineVisible = false;
     private bool isRawVisible = false;
+    private bool isDensityVisible = false;
+    private bool isWordBoxVisible = false;
     [Parameter] public string readingId { get; set; }
     
     private Reading reading;
     private Student showedStudent;
     private TextRecord textRecord;
     
+    // Variables d'analyse
+    private List<Resultat> resultats;
+    private int totalMots;
+    private int motsLus;
+    private int motsNonLus;
+    private double pourcentageLu;
+    private double moyenneFixations;
+    private double moyenneDureeFixation;
+    private int vitesseLecture;
+    
     private async Task UpdateOverlay()
     {
         await JS.InvokeVoidAsync("clearOverlay");
         
-        // Dessiner les courbes actives
+        // Dessiner les ronds de densité EN PREMIER (pour qu'ils soient en arrière-plan)
+        if (isDensityVisible && resultats != null && resultats.Count > 0)
+        {
+            await DrawDensityCircles();
+        }
+        
+        // Dessiner les boîtes autour des mots
+        if (isWordBoxVisible && resultats != null && resultats.Count > 0)
+        {
+            await DrawWordBoxes();
+        }
+        
+        // Dessiner les courbes PAR-DESSUS
         if (isRawVisible && pointsRaw != null && pointsRaw.Count > 0)
         {
             var jsPointsRaw = pointsRaw.Select(p => new { x = p.x, y = p.y }).ToList();
@@ -105,6 +201,37 @@
         {
             var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
             await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
+        }
+    }
+
+    private async Task DrawDensityCircles()
+    {
+        foreach (var r in resultats)
+        {
+            if (r.nbMot > 0)
+            {
+                // Centre du mot
+                double centerX = r.x + r.largeur / 2;
+                double centerY = r.y + r.hauteur / 2;
+                
+                // Rayon basé sur le nombre de points (fixations)
+                double baseRadius = 15;
+                double radius = baseRadius + (r.nbMot * 2);
+                
+                // Opacité basée sur le nombre de points (augmentée pour meilleure visibilité)
+                double opacity = Math.Min(0.4 + (r.nbMot * 0.06), 0.85);
+                
+                // Couleur en fonction de l'intensité (du vert au rouge)
+                string color;
+                if (r.nbMot <= 5)
+                    color = $"rgba(0, 255, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Vert
+                else if (r.nbMot <= 15)
+                    color = $"rgba(255, 165, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Orange
+                else
+                    color = $"rgba(255, 0, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Rouge
+                
+                await JS.InvokeVoidAsync("drawDensityCircle", centerX, centerY, radius, color);
+            }
         }
     }
 
@@ -197,18 +324,162 @@
                 Console.WriteLine($"Ligne CSV ignorée (parse failed): {line}");
             }
         }
+        
+        // Effectuer l'analyse des mots
+        await AnalyseFichiers();
     }
     
-
-
-    private void OnClickDensity(object args)
+    // ------------------- ANALYSE -------------------
+    private async Task AnalyseFichiers()
     {
-        NotificationService.Notify(new NotificationMessage
+        if (textRecord == null) return;
+        
+        string pathMots = Path.Combine(Env.WebRootPath, textRecord.FilePath, "resultats_ocr.csv");
+        string pathPoints = Path.Combine(Env.ContentRootPath, "records", readingId, "cleaned.csv");
+
+        // Vérifier que les fichiers existent
+        if (!File.Exists(pathMots))
         {
-            Severity = NotificationSeverity.Info,
-            Summary = "Mode",
-            Detail = "Densité (non implémenté)"
-        });
+            Console.WriteLine($"Fichier OCR introuvable : {pathMots}");
+            return;
+        }
+        
+        if (!File.Exists(pathPoints))
+        {
+            Console.WriteLine($"Fichier points introuvable : {pathPoints}");
+            return;
+        }
+
+        var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            Delimiter = ",",
+            Encoding = System.Text.Encoding.UTF8,
+            HeaderValidated = null,
+            MissingFieldFound = null
+        };
+
+        try
+        {
+            // --- Lecture fichiers ---
+            var motsCsv = ReadCsv<MotCsv>(pathMots, config);
+            var pointsCsv = ReadCsv<PointCsv>(pathPoints, config)
+                .OrderBy(p => p.timestamp)
+                .ToList();
+
+            totalMots = motsCsv.Count;
+            resultats = new();
+
+            const double margeX = 15;
+            const double margeY = 15;
+
+            // --- Analyse de chaque mot ---
+            foreach (var m in motsCsv)
+            {
+                double x = m.x ?? 0;
+                double y = m.y ?? 0;
+                double w = m.largeur ?? 10;
+                double h = m.hauteur ?? 10;
+
+                double xmin = x - margeX;
+                double xmax = x + w + margeX;
+                double ymin = y - margeY;
+                double ymax = y + h + margeY;
+
+                var pts = pointsCsv
+                    .Where(p => p.x >= xmin && p.x <= xmax && p.y >= ymin && p.y <= ymax)
+                    .ToList();
+
+                int nb = pts.Count;
+
+                // Retours arrière
+                int retours = 0;
+                for (int i = 1; i < pts.Count; i++)
+                    if (pts[i].x < pts[i - 1].x) retours++;
+
+                // Durée fixation
+                double duree =
+                    nb > 1 ? pts.Last().timestamp - pts.First().timestamp :
+                    nb == 1 ? 0.05 : 0;
+
+                // Résultat
+                resultats.Add(new Resultat
+                {
+                    mot = m.mot,
+                    x = x,
+                    y = y,
+                    largeur = w,
+                    hauteur = h,
+                    nbMot = nb,
+                    retourArriere = retours,
+                    tempsFixation = Math.Round(duree, 3),
+                    ligne = m.ligne
+                });
+            }
+
+            // --- Statistiques ---
+            motsLus = resultats.Count(r => r.nbMot > 0);
+            motsNonLus = totalMots - motsLus;
+            pourcentageLu = totalMots > 0 ? 100.0 * motsLus / totalMots : 0;
+
+            var lus = resultats.Where(r => r.nbMot > 0).ToList();
+
+            moyenneFixations = lus.Any() ? lus.Average(r => r.nbMot) : 0;
+            moyenneDureeFixation = lus.Any() ? lus.Average(r => r.tempsFixation) : 0;
+
+            double tempsTotal = lus.Sum(r => r.tempsFixation);
+            vitesseLecture = tempsTotal > 0 ? (int)(motsLus / (tempsTotal / 60.0)) : 0;
+            
+            Console.WriteLine($"Analyse terminée : {motsLus}/{totalMots} mots lus");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de l'analyse : {ex.Message}");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Erreur d'analyse",
+                Detail = $"Impossible d'analyser les fichiers : {ex.Message}"
+            });
+        }
+    }
+
+    private async Task DrawWordBoxes()
+    {
+        foreach (var r in resultats)
+        {
+            // Dessiner une boîte pour chaque mot (lu ou non)
+            // Couleur différente selon si le mot a été lu ou non
+            string borderColor;
+            double opacity;
+            
+            if (r.nbMot > 0)
+            {
+                // Mot lu - couleur en fonction de l'intensité
+                opacity = 0.8;
+                if (r.nbMot <= 5)
+                    borderColor = $"rgba(0, 200, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Vert
+                else if (r.nbMot <= 15)
+                    borderColor = $"rgba(255, 165, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Orange
+                else
+                    borderColor = $"rgba(255, 0, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Rouge
+            }
+            else
+            {
+                // Mot non lu - gris semi-transparent
+                opacity = 0.5;
+                borderColor = $"rgba(150, 150, 150, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})";
+            }
+            
+            await JS.InvokeVoidAsync("drawWordBox", r.x, r.y, r.largeur, r.hauteur, borderColor);
+        }
+    }
+    
+    // ------------------- DATA LOADING -------------------
+    private static List<T> ReadCsv<T>(string path, CsvConfiguration config)
+    {
+        using var reader = new StreamReader(path);
+        using var csv = new CsvReader(reader, config);
+        return csv.GetRecords<T>().ToList();
     }
     
     private void GoBack()
@@ -275,6 +546,88 @@
     .section-container {
         max-width: 1200px;
         margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    /* Stats Card */
+    .stats-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .stats-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .stats-header {
+        display: flex;
+        align-items: center;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f0f8ff 0%, #e0f0ff 100%);
+        border-bottom: 2px solid #b3d9ff;
+    }
+
+    .stats-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.3rem;
+        color: #1d0050;
+        margin: 0;
+    }
+
+    .stats-content {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .stat-item {
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        border-radius: 10px;
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+
+    .stat-item:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        border-color: #3a0099;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #1d0050;
+        font-family: 'Eurostile', sans-serif;
+    }
+
+    .stat-success {
+        color: #28a745;
+    }
+
+    .stat-warning {
+        color: #ffc107;
+    }
+
+    .stat-primary {
+        color: #3a0099;
     }
 
     .controls-card {
@@ -332,6 +685,14 @@
 
     .red-label {
         color: #dc3545 !important;
+    }
+
+    .purple-label {
+        color: #9b59b6 !important;
+    }
+
+    .cyan-label {
+        color: #00bcd4 !important;
     }
 
     .btn-back {
