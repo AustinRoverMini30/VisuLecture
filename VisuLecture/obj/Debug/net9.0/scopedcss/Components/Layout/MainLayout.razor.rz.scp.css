@@ -1,7 +1,7 @@
 /* Import Eurostile Font */
 @font-face {
     font-family: 'Eurostile';
-    src: url('/fonts/EurostileExtendedBlack.ttf') format('truetype');
+    src: url('fonts/EurostileExtendedBlack.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
 }

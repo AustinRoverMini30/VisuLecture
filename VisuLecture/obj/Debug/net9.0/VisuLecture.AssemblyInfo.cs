@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VisuLecture")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5b94c6d3aca132cadbbeb6df834c60492a6e3b36")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+13bf1a3f32635adc222cf1d70597f5db958e511b")]
 [assembly: System.Reflection.AssemblyProductAttribute("VisuLecture")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VisuLecture")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

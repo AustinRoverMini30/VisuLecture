@@ -34,7 +34,7 @@
                         <RadzenIcon Icon="arrow_back" /> Précédent
                     </RadzenButton>
                     <div class="step-indicator">
-                        Étape @(stepSelected + 1) / 4
+                        Étape @(stepSelected + 1) / 5
                     </div>
                     <RadzenButton Disabled="@(!upButtonStat)" Click="args => OnStepUp()" class="nav-button">
                         Suivant <RadzenIcon Icon="arrow_forward" />
@@ -43,6 +43,63 @@
                 
                 <RadzenSteps SelectedIndex="@stepSelected" ShowStepsButtons="false" AllowStepSelect="false" class="modern-steps">
                     <Steps>
+                        <RadzenStepsItem Text="@(selectedCameraLabel != "" ? $"Caméra: {selectedCameraLabel}" : "Sélection de la caméra")">
+                            <div class="step-content">
+                                <h3 class="step-title">
+                                    <RadzenIcon Icon="videocam" style="margin-right: 8px;" />
+                                    Choisissez votre caméra
+                                </h3>
+                                
+                                <div class="camera-test-card">
+                                    @if (availableCameras.Count == 0)
+                                    {
+                                        <div class="loading-cameras">
+                                            <RadzenProgressBarCircular ShowValue="false" 
+                                                                     Mode="ProgressBarMode.Indeterminate"
+                                                                     Size="ProgressBarCircularSize.Medium"
+                                                                     ProgressBarStyle="ProgressBarStyle.Info">
+                                            </RadzenProgressBarCircular>
+                                            <p style="margin-top: 1rem;">Recherche des caméras disponibles...</p>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="camera-selection">
+                                            <RadzenFormField Text="Sélectionnez votre caméra" style="width: 100%;">
+                                                <RadzenDropDown @bind-Value="@selectedCameraId" 
+                                                              Data="@availableCameras" 
+                                                              TextProperty="Label" 
+                                                              ValueProperty="DeviceId"
+                                                              Change="@OnCameraChange"
+                                                              Style="width: 100%;" />
+                                            </RadzenFormField>
+                                            
+                                            <div class="camera-preview-container">
+                                                <video id="camera-test-preview" autoplay muted playsinline class="camera-preview"></video>
+                                                @if (!isCameraTesting)
+                                                {
+                                                    <div class="camera-preview-placeholder">
+                                                        <RadzenIcon Icon="videocam_off" style="font-size: 4rem; color: rgba(255,255,255,0.5); margin-bottom: 1rem;" />
+                                                        <p style="color: rgba(255,255,255,0.7); font-size: 1.1rem; margin: 0;">Aperçu de la caméra</p>
+                                                    </div>
+                                                }
+                                            </div>
+                                            
+                                            <RadzenButton Text="TESTER" 
+                                                        Click="@TestCameraButton" 
+                                                        ButtonStyle="ButtonStyle.Primary"
+                                                        Size="ButtonSize.Large"
+                                                        Style="width: 100%; padding: 1rem; font-size: 1.1rem; margin-top: 1rem;"
+                                                        Disabled="@(selectedCameraId == "" || isCameraTesting)" />
+                                            
+                                            <p class="camera-instruction">
+                                                Cliquez sur "TESTER" pour vérifier que votre caméra fonctionne correctement.
+                                            </p>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </RadzenStepsItem>
                         <RadzenStepsItem Text="@(model.FirstName != "" ? $"Élève: {model.FirstName} {model.LastName}" : "Sélection de l'élève")">>
                             <div class="step-content">
                                 <h3 class="step-title">
@@ -195,14 +252,6 @@
                                             {
                                                 <RadzenCarouselItem>
                                                     <div class="text-select-card">
-                                                        <div class="text-card-header">
-                                                            <h4 class="text-card-title">@textR.Name</h4>
-                                                        </div>
-                                                        
-                                                        <div class="text-card-preview">
-                                                            <RadzenImage Path="@(textR.FilePath + "/image.png")" 
-                                                                       Style="width: 100%; border-radius: 8px;" />
-                                                        </div>
                                                         
                                                         <div class="text-card-actions">
                                                             @if (textRecordId == textR.Id)
@@ -212,11 +261,22 @@
                                                             else
                                                             {
                                                                 <RadzenButton Click="args => SelectText(textR)" 
-                                                                            class="btn-select-lg">
+                                                                              class="btn-select-lg">
                                                                     <RadzenIcon Icon="check_circle" /> Sélectionner ce texte
                                                                 </RadzenButton>
                                                             }
                                                         </div>
+                                                        
+                                                        <div class="text-card-header">
+                                                            <h4 class="text-card-title">@textR.Name</h4>
+                                                        </div>
+
+                                                        <div class="text-card-preview">
+                                                            <RadzenImage Path="@(textR.FilePath + "/image.png")"
+                                                                         Style="width: 100%; border-radius: 8px;"/>
+                                                        </div>
+
+
                                                     </div>
                                                 </RadzenCarouselItem>
                                             }
@@ -629,6 +689,66 @@
         font-size: 1.1rem !important;
     }
 
+    /* Camera Test Card */
+    .camera-test-card {
+        max-width: 800px;
+        margin: 2rem auto;
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .loading-cameras {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        color: #666;
+    }
+
+    .camera-selection {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .camera-preview-container {
+        position: relative;
+        width: 100%;
+        height: 400px;
+        background: #000;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .camera-preview {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .camera-preview-placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a1a;
+    }
+
+    .camera-instruction {
+        text-align: center;
+        color: #666;
+        font-size: 1rem;
+        margin: 0;
+    }
+
     /* Calibration Card */
     .calibration-card {
         max-width: 600px;
@@ -854,6 +974,12 @@
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
+    
+    // Variables pour la gestion des caméras
+    private List<CameraDevice> availableCameras = new List<CameraDevice>();
+    private string selectedCameraId = "";
+    private string selectedCameraLabel = "";
+    private bool isCameraTesting = false;
 
     private bool isCalibratingServer = false;
     private bool wasCalibrated = false;
@@ -894,6 +1020,28 @@
         CleanOrphanRecords();
     }
     
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var size = await JS.InvokeAsync<WindowSize>("getWindowSize");
+            screenW = size.width;
+            screenH = size.height;
+
+            // Définir les positions : centre, puis coins dans le sens horaire
+            positions.Add((screenW / 2, screenH / 2)); // 0: Centre
+            positions.Add((dotW, dotW)); // 1: Coin supérieur gauche
+            positions.Add((screenW - dotW, dotW)); // 2: Coin supérieur droit
+            positions.Add((screenW - dotW, screenH - dotW)); // 3: Coin inférieur droit
+            positions.Add((dotW, screenH - dotW)); // 4: Coin inférieur gauche
+
+            // Charger les caméras disponibles
+            await LoadAvailableCameras();
+
+            StateHasChanged();
+        }
+    }
+
     private void CleanOrphanRecords()
     {
         try
@@ -975,23 +1123,28 @@
         if (stepSelected == 0)
         {
             downButtonStat = false;
-
-            upButtonStat = model.FirstName != "";
+            // Le bouton suivant est activé dès qu'une caméra est sélectionnée
         }
         else if (stepSelected == 1)
         {
             downButtonStat = true;
 
-            upButtonStat = textRecord.Name != "";
+            upButtonStat = model.FirstName != "";
         }
         else if (stepSelected == 2)
+        {
+            downButtonStat = true;
+
+            upButtonStat = textRecord.Name != "";
+        }
+        else if (stepSelected == 3)
         {
             EnterFullScreen();
             upButtonStat = wasCalibrated;
 
             downButtonStat = !wasCalibrated;
         }
-        else if (stepSelected == 3)
+        else if (stepSelected == 4)
         {
             EnterFullScreen();
             upButtonStat = false;
@@ -1028,29 +1181,14 @@
         public int height { get; set; }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            var size = await JS.InvokeAsync<WindowSize>("getWindowSize");
-            screenW = size.width;
-            screenH = size.height;
-
-            // Définir les positions : centre, puis coins dans le sens horaire
-            positions.Add((screenW / 2, screenH / 2)); // 0: Centre
-            positions.Add((dotW, dotW)); // 1: Coin supérieur gauche
-            positions.Add((screenW - dotW, dotW)); // 2: Coin supérieur droit
-            positions.Add((screenW - dotW, screenH - dotW)); // 3: Coin inférieur droit
-            positions.Add((dotW, screenH - dotW)); // 4: Coin inférieur gauche
-
-            StateHasChanged();
-        }
-    }
 
     private async Task CalibrateServer()
     {
         isCalibratingServer = false;
         wasCalibrated = true;
+
+        // Passer automatiquement à l'onglet lecture (étape 4)
+        stepSelected = 4;
 
         OnChange();
     }
@@ -1236,28 +1374,133 @@
         Navigation.NavigateTo("/");
     }
 
-    private Task OnStepDown()
+    private async Task OnStepDown()
     {
         if (stepSelected > 0)
         {
             stepSelected--;
+            
+            // Si on revient à l'étape caméra, arrêter le test en cours
+            if (stepSelected == 0 && isCameraTesting)
+            {
+                await StopCameraTest();
+                isCameraTesting = false;
+            }
         }
 
         OnChange();
-
-        return Task.CompletedTask;
     }
 
-    private Task OnStepUp()
+    private async Task OnStepUp()
     {
-        if (stepSelected < 3)
+        // Si on quitte l'étape caméra (étape 0), arrêter le test et sauvegarder la sélection
+        if (stepSelected == 0)
+        {
+            await StopCameraTest();
+            await JSRuntime.InvokeVoidAsync("setSelectedCamera", selectedCameraId);
+        }
+        
+        if (stepSelected < 4)
         {
             stepSelected++;
         }
 
         OnChange();
-
-        return Task.CompletedTask;
+    }
+    
+    // Classe pour représenter un périphérique caméra
+    public class CameraDevice
+    {
+        public string DeviceId { get; set; }
+        public string Label { get; set; }
+    }
+    
+    // Méthode pour initialiser la liste des caméras
+    private async Task LoadAvailableCameras()
+    {
+        try
+        {
+            Console.WriteLine("LoadAvailableCameras: début");
+            var cameras = await JSRuntime.InvokeAsync<List<CameraDevice>>("getAvailableCameras");
+            availableCameras = cameras ?? new List<CameraDevice>();
+            Console.WriteLine($"LoadAvailableCameras: {availableCameras.Count} caméra(s) trouvée(s)");
+            
+            if (availableCameras.Count > 0)
+            {
+                selectedCameraId = availableCameras[0].DeviceId;
+                selectedCameraLabel = availableCameras[0].Label;
+                Console.WriteLine($"LoadAvailableCameras: caméra sélectionnée = {selectedCameraLabel}");
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du chargement des caméras: {ex.Message}");
+        }
+    }
+    
+    // Méthode appelée quand l'utilisateur change de caméra
+    private async Task OnCameraChange(object value)
+    {
+        upButtonStat = false;
+        selectedCameraId = value?.ToString() ?? "";
+        var camera = availableCameras.FirstOrDefault(c => c.DeviceId == selectedCameraId);
+        if (camera != null)
+        {
+            selectedCameraLabel = camera.Label;
+        }
+        
+        // Si un test était en cours, l'arrêter
+        if (isCameraTesting)
+        {
+            await StopCameraTest();
+            isCameraTesting = false;
+        }
+        
+        OnChange();
+    }
+    
+    // Méthode pour tester la caméra sélectionnée
+    private async Task TestCamera()
+    {
+        try
+        {
+            Console.WriteLine($"TestCamera appelé avec deviceId: {selectedCameraId}");
+            await JSRuntime.InvokeVoidAsync("testCamera", selectedCameraId);
+            Console.WriteLine("TestCamera terminé avec succès");
+            upButtonStat = true;
+            StateHasChanged();
+            
+            
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du test de la caméra: {ex.Message}");
+        }
+    }
+    
+    // Méthode appelée quand on clique sur le bouton TESTER
+    private async Task TestCameraButton()
+    {
+        isCameraTesting = true;
+        StateHasChanged();
+        
+        await Task.Delay(100); // Petit délai pour que l'UI se mette à jour
+        await TestCamera();
+    }
+    
+    // Méthode pour arrêter le test de la caméra
+    private async Task StopCameraTest()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("stopCameraTest");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de l'arrêt du test de la caméra: {ex.Message}");
+        }
     }
 
 }
