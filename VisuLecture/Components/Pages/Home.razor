@@ -1,7 +1,501 @@
 ﻿@page "/"
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 @inject AppState AppState
+@inject IJSRuntime JSRuntime
 
-<h1>Hello, world!</h1>
-<CameraLite></CameraLite>
+<div class="home-container">
+    
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-overlay"></div>
+        <div class="hero-content animate-fade-in">
+            <h1 class="hero-title">VisuLecture</h1>
+            <p class="hero-subtitle">Parce que la lecture est une force</p>
+            <p class="hero-description">
+                Analysez les mouvements oculaires pendant la lecture avec une précision inégalée. 
+                Transformez les données d'eye-tracking en insights exploitables.
+            </p>
+            <div class="hero-buttons">
+                <RadzenButton Click="@Begin" Size="ButtonSize.Large" class="btn-primary-custom">
+                    <i class="rzi rzi-play-circle" style="margin-right: 8px;"></i>
+                    Commencer maintenant
+                </RadzenButton>
+                <RadzenButton Click="@GoToPanel" Size="ButtonSize.Large" Variant="Variant.Outlined" class="btn-secondary-custom">
+                    <i class="rzi rzi-bar-chart" style="margin-right: 8px;"></i>
+                    Panneau enseignant
+                </RadzenButton>
+            </div>
+        </div>
+    </section>
+    
 
+</div>
+
+<style>
+    .home-container {
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    /* Hero Section */
+    .hero-section {
+        position: relative;
+        height: 90vh;
+        min-height: 600px;
+        background-image: url('pictures/screenshot_2.png');
+        background-size: cover;
+        background-position: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .hero-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.85) 0%, rgba(118, 75, 162, 0.85) 100%);
+    }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        color: white;
+        max-width: 900px;
+        padding: 2rem;
+    }
+
+    .hero-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: clamp(3rem, 8vw, 7rem);
+        font-weight: 900;
+        margin: 0 0 1rem 0;
+        text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        letter-spacing: 2px;
+    }
+
+    .hero-subtitle {
+        font-family: 'Eurostile', sans-serif;
+        font-size: clamp(1.5rem, 4vw, 3rem);
+        font-weight: 300;
+        margin: 0 0 1.5rem 0;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .hero-description {
+        font-size: 1.2rem;
+        line-height: 1.8;
+        margin: 0 0 2.5rem 0;
+        opacity: 0.95;
+        max-width: 700px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .hero-buttons {
+        display: flex;
+        gap: 1.5rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .btn-primary-custom {
+        background: white !important;
+        color: #667eea !important;
+        border: none !important;
+        padding: 1rem 2.5rem !important;
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        border-radius: 50px !important;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .btn-primary-custom:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .btn-secondary-custom {
+        background: transparent !important;
+        color: white !important;
+        border: 2px solid white !important;
+        padding: 1rem 2.5rem !important;
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        border-radius: 50px !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .btn-secondary-custom:hover {
+        background: white !important;
+        color: #667eea !important;
+        transform: translateY(-3px) !important;
+    }
+
+    /* Stats Section */
+    .stats-section {
+        padding: 4rem 2rem;
+        background: #f8f9fa;
+    }
+
+    .stats-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+    }
+
+    .stat-card {
+        text-align: center;
+        padding: 2rem;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .stat-number {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 3rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+        font-size: 1.1rem;
+        color: #666;
+        font-weight: 500;
+    }
+
+    /* Features Section */
+    .features-section {
+        padding: 5rem 2rem;
+        background: white;
+    }
+
+    .section-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 2.5rem;
+        text-align: center;
+        margin-bottom: 3rem;
+        color: #333;
+    }
+
+    .features-grid {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+    }
+
+    .feature-card {
+        padding: 2rem;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
+        border: 1px solid #f0f0f0;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .feature-icon {
+        width: 70px;
+        height: 70px;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .feature-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.4rem;
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .feature-description {
+        color: #666;
+        line-height: 1.6;
+        font-size: 1rem;
+    }
+
+    /* How It Works Section */
+    .howto-section {
+        padding: 5rem 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .steps-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .step-card {
+        flex: 1;
+        min-width: 250px;
+        max-width: 300px;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 2rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .step-number {
+        width: 60px;
+        height: 60px;
+        background: white;
+        color: #667eea;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.8rem;
+        font-weight: 900;
+        margin-bottom: 1rem;
+    }
+
+    .step-content {
+        flex: 1;
+    }
+
+    .step-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .step-description {
+        font-size: 0.95rem;
+        opacity: 0.9;
+        line-height: 1.5;
+    }
+
+    .step-arrow {
+        font-size: 2rem;
+        opacity: 0.7;
+        display: none;
+    }
+
+    @@media (min-width: 1200px) {
+        .step-arrow {
+            display: block;
+        }
+    }
+
+    /* CTA Section */
+    .cta-section {
+        padding: 5rem 2rem;
+        background: #f8f9fa;
+    }
+
+    .cta-content {
+        max-width: 800px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .cta-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .cta-description {
+        font-size: 1.2rem;
+        color: #666;
+        margin-bottom: 2rem;
+        line-height: 1.6;
+    }
+
+    .btn-cta {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        border: none !important;
+        padding: 1.2rem 3rem !important;
+        font-size: 1.2rem !important;
+        font-weight: 600 !important;
+        border-radius: 50px !important;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    .btn-cta:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 12px 35px rgba(102, 126, 234, 0.4) !important;
+    }
+
+    /* Footer */
+    .home-footer {
+        background: #2c3e50;
+        color: white;
+        padding: 3rem 2rem 2rem 2rem;
+    }
+
+    .footer-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 2rem;
+    }
+
+    .footer-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+
+    .footer-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .footer-text {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    .footer-link {
+        color: rgba(255, 255, 255, 0.8) !important;
+        text-decoration: none !important;
+        transition: color 0.3s ease !important;
+        display: block;
+    }
+
+    .footer-link:hover {
+        color: white !important;
+    }
+
+    /* Animations */
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(50px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes slideRight {
+        from {
+            opacity: 0;
+            transform: translateX(-50px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 1s ease-out forwards;
+    }
+
+    .animate-slide-up {
+        animation: slideUp 0.8s ease-out forwards;
+        opacity: 0;
+    }
+
+    .animate-slide-right {
+        animation: slideRight 0.8s ease-out forwards;
+        opacity: 0;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .hero-section {
+            height: 100vh;
+        }
+
+        .hero-buttons {
+            flex-direction: column;
+        }
+
+        .stats-container {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .features-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .steps-container {
+            flex-direction: column;
+        }
+
+        .step-arrow {
+            display: none;
+        }
+    }
+</style>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Ajouter des animations au scroll si nécessaire
+            await Task.CompletedTask;
+        }
+    }
+
+    private void Begin()
+    {
+        Navigation.NavigateTo("/reading-process");
+    }
+
+    private void GoToPanel()
+    {
+        Navigation.NavigateTo("/teacher-panel");
+    }
+}

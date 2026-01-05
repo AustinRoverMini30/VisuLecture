@@ -1,0 +1,135 @@
+@using VisuLecture.Components.Model
+@inject DialogService DialogService
+@inject CalibrationService CalibrationService
+@inject AppDbContext Db
+@using VisuLecture.Components.Controller
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H5">Sélectionnez un enregistrement pour @Student.FirstName @Student.LastName</RadzenText>
+    
+    <RadzenDataList Data="@Readings" TItem="Reading" style="width: 100%">
+        <Template Context="reading">
+            @{
+                var isCurrentlyProcessing = CalibrationService.clientId == reading.StudentId;
+                var isInQueue = CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
+                var isBlocked = isCurrentlyProcessing || isInQueue;
+            }
+            <RadzenCard Style="margin-bottom: 1rem;">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" Style="@(isBlocked ? "opacity: 0.6;" : "")">
+                        <RadzenText TextStyle="TextStyle.Body1">
+                            <strong>Date:</strong> @reading.Date.ToString("dd/MM/yyyy HH:mm")
+                        </RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2">
+                            <strong>Texte:</strong> @reading.TextRecord?.Name
+                        </RadzenText>
+                        @if (isCurrentlyProcessing)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="En cours de traitement"></RadzenBadge>
+                                <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Warning" Value="100" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" AriaLabel="Processing" />
+                            </RadzenStack>
+                        }
+                        else if (isInQueue)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Base" Text="En attente"></RadzenBadge>
+                                <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Base" Value="100" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" AriaLabel="Waiting" />
+                            </RadzenStack>
+                        }
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                        @if (!isBlocked)
+                        {
+                            <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                                          Click="() => SelectReading(reading)" 
+                                          title="Consulter l'enregistrement" />
+                            <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" 
+                                          Click="() => DeleteReading(reading)" 
+                                          title="Supprimer l'enregistrement" />
+                        }
+                        else
+                        {
+                            <RadzenButton Icon="block" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" Disabled="true" />
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+        </Template>
+    </RadzenDataList>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public Student Student { get; set; }
+    
+    [Parameter]
+    public List<Reading> Readings { get; set; }
+    
+    bool IsReadingProcessing(string readingId)
+    {
+        // Vérifier si le readingId correspond à celui en cours de traitement
+        var reading = Db.Readings.FirstOrDefault(r => r.Id == readingId);
+        if (reading == null) return false;
+        
+        // Vérifier si ce reading est en cours de traitement
+        return CalibrationService.clientId == reading.StudentId ||
+               CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
+    }
+    
+    async Task DeleteReading(Reading reading)
+    {
+        // Demander confirmation
+        var confirm = await DialogService.Confirm(
+            $"Êtes-vous sûr de vouloir supprimer l'enregistrement du {reading.Date:dd/MM/yyyy HH:mm} ?",
+            "Confirmer la suppression",
+            new ConfirmOptions { OkButtonText = "Oui", CancelButtonText = "Non" });
+        
+        if (confirm == true)
+        {
+            try
+            {
+                // Supprimer les dossiers associés
+                string recordsPath = Path.Combine(Directory.GetCurrentDirectory(), "records", reading.Id);
+                if (Directory.Exists(recordsPath))
+                {
+                    Directory.Delete(recordsPath, true);
+                }
+                
+                string uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", reading.Id);
+                if (Directory.Exists(uploadsPath))
+                {
+                    Directory.Delete(uploadsPath, true);
+                }
+                
+                // Supprimer de la base de données
+                Db.Readings.Remove(reading);
+                await Db.SaveChangesAsync();
+                
+                // Retirer de la liste locale
+                Readings.Remove(reading);
+                
+                // Si plus d'enregistrements, fermer le dialog
+                if (Readings.Count == 0)
+                {
+                    DialogService.Close(null);
+                }
+                else
+                {
+                    // Rafraîchir l'affichage
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                await DialogService.Alert($"Erreur lors de la suppression : {ex.Message}", "Erreur");
+            }
+        }
+    }
+    
+    void SelectReading(Reading reading)
+    {
+        DialogService.Close(reading.Id);
+    }
+}
+

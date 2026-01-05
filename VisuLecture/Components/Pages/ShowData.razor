@@ -1,0 +1,179 @@
+@page "/show-data/{readingId}"
+@rendermode InteractiveServer
+@inject IJSRuntime JSRuntime
+@using System.Globalization
+@using VisuLecture.Components.Controller
+@using VisuLecture.Components.Model
+@using Microsoft.EntityFrameworkCore
+@inject NotificationService NotificationService
+@inject IJSRuntime JS
+@inject AppDbContext Db
+
+<RadzenStack Orientation="Orientation.Vertical" Style="background-color: black; top: 0; left: 0; width: 100vw; height: 100vh; overflow-x: hidden;">
+    <div class="header_dark">
+        <RadzenStack Orientation="Orientation.Vertical"
+                     AlignItems="AlignItems.Start"
+                     JustifyContent="JustifyContent.Center"
+                     Gap="2rem"
+                     Wrap="FlexWrap.Wrap"
+                     class="rz-p-12">
+
+            <RadzenStack Orientation="Orientation.Horizontal"
+                         AlignItems="AlignItems.Center"
+                         JustifyContent="JustifyContent.Start"
+                         Gap="1rem"
+                         Wrap="FlexWrap.Wrap">
+                
+                <RadzenCheckBox @bind-Value=@isRawVisible Change="@UpdateOverlay" TValue="bool" />
+                <RadzenLabel Text="Données calibrées" Style="color: white; margin-right: 1rem;" />
+                
+                <RadzenCheckBox @bind-Value=@isAffineVisible Change="@UpdateOverlay" TValue="bool" />
+                <RadzenLabel Text="Données brutes" Style="color: white;" />
+            </RadzenStack>
+
+        </RadzenStack>
+    </div>
+
+    <div class="image-container">
+        <RadzenImage Path="@(textRecord.FilePath + "/image.png")"
+                     Attributes="@(new Dictionary<string, object>
+                                 {
+                                     { "id", "backgroundImage" },
+                                     { "class", "calibration-image" }
+                                 })" />
+        <canvas id="overlayCanvas"></canvas>
+    </div>
+</RadzenStack>
+
+@code {
+    private List<(double x, double y)> points = new();
+    private List<(double x, double y)> pointsRaw = new();
+    private bool isAffineVisible = false;
+    private bool isRawVisible = false;
+    [Parameter] public string readingId { get; set; }
+    
+    private Reading reading;
+    private Student showedStudent;
+    private TextRecord textRecord;
+    
+    private async Task UpdateOverlay()
+    {
+        await JS.InvokeVoidAsync("clearOverlay");
+        
+        // Dessiner les courbes actives
+        if (isRawVisible && pointsRaw != null && pointsRaw.Count > 0)
+        {
+            var jsPointsRaw = pointsRaw.Select(p => new { x = p.x, y = p.y }).ToList();
+            await JS.InvokeVoidAsync("drawFollowLine", jsPointsRaw, "red", "blue");
+        }
+        
+        if (isAffineVisible && points != null && points.Count > 0)
+        {
+            var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
+            await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Charger la lecture avec ses relations
+        reading = await Db.Readings
+            .Include(r => r.Student)
+            .Include(r => r.TextRecord)
+            .FirstOrDefaultAsync(r => r.Id == readingId);
+        
+        if (reading == null)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Erreur",
+                Detail = "Enregistrement introuvable"
+            });
+            return;
+        }
+        
+        showedStudent = reading.Student;
+        textRecord = reading.TextRecord;
+        
+        var csvPath = "records/" + readingId + "/raw.csv";
+        var csvRaw = "records/" + readingId + "/cleaned.csv";
+
+        if (!File.Exists(csvPath))
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "CSV manquant",
+                Detail = $"Fichier introuvable : {csvPath}"
+            });
+            return;
+        }
+
+        var csv = await File.ReadAllLinesAsync(csvPath);
+
+        points.Clear();
+
+        foreach (var raw in csv.Skip(1)) // skip header
+        {
+            var line = raw?.Trim();
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            var parts = line.Split(',');
+            if (parts.Length < 3)
+                continue;
+
+            // index,x,y  -> x = parts[1], y = parts[2]
+            if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
+                double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
+            {
+                points.Add((x, y));
+            }
+            else
+            {
+                // Optionnel : log / notify pour les lignes malformées
+                Console.WriteLine($"Ligne CSV ignorée (parse failed): {line}");
+            }
+        }
+        
+        csv = await File.ReadAllLinesAsync(csvRaw);
+
+        pointsRaw.Clear();
+
+        foreach (var raw in csv.Skip(1)) // skip header
+        {
+            var line = raw?.Trim();
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            var parts = line.Split(',');
+            if (parts.Length < 3)
+                continue;
+
+            // index,x,y  -> x = parts[1], y = parts[2]
+            if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
+                double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
+            {
+                pointsRaw.Add((x, y));
+            }
+            else
+            {
+                // Optionnel : log / notify pour les lignes malformées
+                Console.WriteLine($"Ligne CSV ignorée (parse failed): {line}");
+            }
+        }
+    }
+    
+
+
+    private void OnClickDensity(object args)
+    {
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Info,
+            Summary = "Mode",
+            Detail = "Densité (non implémenté)"
+        });
+    }
+}

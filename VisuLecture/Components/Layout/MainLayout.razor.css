@@ -1,98 +1,216 @@
+/* Import Eurostile Font */
+@font-face {
+    font-family: 'Eurostile';
+    src: url('/fonts/EurostileExtendedBlack.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* Modern Navbar Styles */
+.modern-navbar {
+    position: relative;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+}
+
+.navbar-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 3rem;
+    position: relative;
+    z-index: 10;
+}
+
+.logo-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.logo-main {
+    font-family: 'Eurostile', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.logo-tagline {
+    font-family: 'Eurostile', sans-serif;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 300;
+    letter-spacing: 0.5px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 2.5rem;
+    align-items: center;
+}
+
+.nav-links ::deep .nav-link {
+    font-family: 'Eurostile', sans-serif;
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1rem;
+    position: relative;
+    padding: 0.5rem 0;
+    transition: all 0.3s ease;
+}
+
+.nav-links ::deep .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: white;
+    transition: width 0.3s ease;
+}
+
+.nav-links ::deep .nav-link:hover {
+    transform: translateY(-2px);
+    color: rgba(255, 255, 255, 1);
+}
+
+.nav-links ::deep .nav-link:hover::after {
+    width: 100%;
+}
+
+/* Animated Curves */
+.animated-curves {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100px;
+    z-index: 1;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.curve {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.9;
+    transition: opacity 0.3s ease;
+}
+
+.curve-1 {
+    stroke: #ff6b6b;
+}
+
+.curve-2 {
+    stroke: #4ecdc4;
+}
+
+.curve-3 {
+    stroke: #ffe66d;
+}
+
+.curve-4 {
+    stroke: #95e1d3;
+}
+
+.curve-5 {
+    stroke: #f38181;
+}
+
+.curve-6 {
+    stroke: #a8e6cf;
+}
+
+.curve-7 {
+    stroke: #ffd3b6;
+}
+
+.curve-8 {
+    stroke: #ffaaa5;
+}
+
+.curve-9 {
+    stroke: #ff8b94;
+}
+
+.curve-10 {
+    stroke: #c7ceea;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .navbar-container {
+        flex-direction: column;
+        padding: 1rem 1.5rem;
+        gap: 1rem;
+    }
+    
+    .nav-links {
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .logo-main {
+        font-size: 1.5rem;
+    }
+    
+    .animated-curves {
+        height: 60px;
+    }
+}
+
+/* Page Layout */
 .page {
     position: relative;
     display: flex;
     flex-direction: column;
+    min-height: 100vh;
 }
 
-main {
-    flex: 1;
-}
-
-.sidebar {
-    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
-}
-
-.top-row {
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #d6d5d5;
-    justify-content: flex-end;
-    height: 3.5rem;
-    display: flex;
-    align-items: center;
-}
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        white-space: nowrap;
-        margin-left: 1.5rem;
-        text-decoration: none;
-    }
-
-    .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
-        text-decoration: underline;
-    }
-
-    .top-row ::deep a:first-child {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-@media (max-width: 640.98px) {
-    .top-row {
-        justify-content: space-between;
-    }
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        margin-left: 0;
-    }
-}
-
-@media (min-width: 641px) {
-    .page {
-        flex-direction: row;
-    }
-
-    .sidebar {
-        width: 250px;
-        height: 100vh;
-        position: sticky;
-        top: 0;
-    }
-
-    .top-row {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-    }
-
-    .top-row.auth ::deep a:first-child {
-        flex: 1;
-        text-align: right;
-        width: 0;
-    }
-
-    .top-row, article {
-        padding-left: 2rem !important;
-        padding-right: 1.5rem !important;
-    }
-}
-
+/* Blazor Error UI */
 #blazor-error-ui {
     color-scheme: light only;
-    background: lightyellow;
+    background: #fff3cd;
     bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 -1px 10px rgba(0, 0, 0, 0.2);
     box-sizing: border-box;
     display: none;
     left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    padding: 0.8rem 1.5rem;
     position: fixed;
     width: 100%;
-    z-index: 1000;
+    z-index: 10000;
+    border-top: 3px solid #ff6b6b;
 }
 
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
-    }
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+    color: #721c24;
+    transition: transform 0.2s ease;
+}
+
+#blazor-error-ui .dismiss:hover {
+    transform: translateY(-50%) scale(1.2);
+}
+
+#blazor-error-ui .reload {
+    color: #721c24;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+

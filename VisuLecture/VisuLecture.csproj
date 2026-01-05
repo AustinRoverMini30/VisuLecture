@@ -7,11 +7,37 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="9.0.11" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.11" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.11">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.11" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="9.0.11" />
+      <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+      <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
+      <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
       <PackageReference Include="Radzen.Blazor" Version="7.4.3" />
+      <PackageReference Include="SkiaSharp" Version="3.119.2-preview.1" />
+      <PackageReference Include="Tesseract" Version="5.2.0" />
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Components\Text\" />
+      <Folder Include="records\" />
+      <Folder Include="uploads\" />
+      <Folder Include="wwwroot\recordings\" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="wwwroot\js\overlay.js" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="wwwroot\textImg\0Coucou\image.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\textImg\0Coucou\resultats_ocr.csv" />
+      <_ContentIncludedByDefault Remove="wwwroot\textImg\2Ah\image.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\textImg\2Ah\resultats_ocr.csv" />
     </ItemGroup>
 
 </Project>

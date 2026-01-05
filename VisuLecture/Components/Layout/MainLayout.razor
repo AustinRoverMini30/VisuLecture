@@ -1,23 +1,73 @@
-﻿    @inherits LayoutComponentBase
+﻿@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
 <RadzenComponents @rendermode="InteractiveServer" />
-<div class="page">
-    <div class="sidebar">
-        <NavMenu/>
-    </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+<nav class="modern-navbar">
+    <div class="navbar-container">
+        <div class="logo-section">
+            <span class="logo-main">VisuLecture</span>
+            <span class="logo-tagline">Un regard aiguisé</span>
         </div>
+        <div class="nav-links">
+            <RadzenLink Path="/" Text="Accueil" class="nav-link" />
+            <RadzenLink Path="/reading-process" Text="Enregistrer" class="nav-link" />
+            <RadzenLink Path="/teacher-panel" Text="Panneau général" class="nav-link" />
+        </div>
+    </div>
+    <svg class="animated-curves" viewBox="0 0 1920 100" preserveAspectRatio="none">
+        <path class="curve curve-1" d="" />
+        <path class="curve curve-2" d="" />
+        <path class="curve curve-3" d="" />
+        <path class="curve curve-4" d="" />
+        <path class="curve curve-5" d="" />
+        <path class="curve curve-6" d="" />
+        <path class="curve curve-7" d="" />
+        <path class="curve curve-8" d="" />
+        <path class="curve curve-9" d="" />
+        <path class="curve curve-10" d="" />
+    </svg>
+</nav>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+<RadzenStack Orientation="Orientation.Vertical">
+    @Body
+</RadzenStack>
+ 
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+<script src="/js/eyetracking-curves.js"></script>
+
+@code {
+    private IJSObjectReference? jsModule;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Petite pause pour s'assurer que le DOM est complètement chargé
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("initEyeTrackingCurves");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur initialisation courbes: {ex.Message}");
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (jsModule != null)
+        {
+            await jsModule.DisposeAsync();
+        }
+    }
+}
+

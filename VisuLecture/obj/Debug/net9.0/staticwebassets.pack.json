@@ -13,6 +13,10 @@
       "PackagePath": "staticwebassets\\favicon.png"
     },
     {
+      "Id": "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\wwwroot\\js\\cam-min.js",
+      "PackagePath": "staticwebassets\\js\\cam-min.js"
+    },
+    {
       "Id": "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\wwwroot\\lib\\bootstrap\\dist\\css\\bootstrap-grid.css",
       "PackagePath": "staticwebassets\\lib\\bootstrap\\dist\\css\\bootstrap-grid.css"
     },

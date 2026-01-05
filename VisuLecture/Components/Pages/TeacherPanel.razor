@@ -1,0 +1,1271 @@
+@page "/teacher-panel"
+@using System.Diagnostics
+@using System.Text
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+@using System.Timers;
+@using Microsoft.EntityFrameworkCore
+@using SkiaSharp
+@using Tesseract
+@using VisuLecture.Components.Controller
+@using VisuLecture.Components.Model
+@using Orientation = Radzen.Orientation
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject AppDbContext Db
+@inject IWebHostEnvironment Env
+@inject CalibrationService CalibrationService
+
+<div class="teacher-panel-container">
+    
+    <!-- Hero Section -->
+    <section class="teacher-hero">
+        <div class="hero-gradient"></div>
+        <div class="hero-content">
+            <h1 class="page-title">
+                <RadzenIcon Icon="dashboard" style="margin-right: 15px; font-size: inherit;" />
+                Panneau Enseignant
+            </h1>
+            <p class="page-subtitle">Gérez vos élèves, textes et surveillez l'état du système</p>
+        </div>
+    </section>
+
+    <!-- BeamEye Status Section -->
+    <section class="status-section">
+        <div class="section-container">
+            <div class="status-card">
+                <div class="status-header">
+                    <div class="status-icon">
+                        <img src="/pictures/beam.png" alt="BeamEye" style="width: 100%; height: 100%; object-fit: contain;" />
+                    </div>
+                    <div class="status-info">
+                        <h3 class="status-title">État BeamEye Tracker</h3>
+                        <p class="status-description">Surveillance du système d'eye-tracking</p>
+                    </div>
+                </div>
+                
+                <div class="status-content">
+                    @if (BeamStatus == "En cours")
+                    {
+                        <div class="status-display running">
+                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text=@BeamStatus class="custom-badge"></RadzenBadge>
+                            <div class="status-buttons">
+                                <RadzenButton Click="@RestartBeam" class="btn-restart">
+                                    <RadzenIcon Icon="refresh" /> Redémarrer
+                                </RadzenButton>
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Click="@StopBeam" class="btn-stop">
+                                    <RadzenIcon Icon="stop" /> Arrêter
+                                </RadzenButton>
+                            </div>
+                        </div>
+                    }
+                    else if (BeamStatus == "Redémarrage..." || BeamStatus == "Arrêt en cours..." || BeamStatus == "Démarrage en cours...")
+                    {
+                        <div class="status-display loading">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="15px" AlignItems="AlignItems.Center">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text=@BeamStatus class="custom-badge"></RadzenBadge>
+                                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" AriaLabel="Loading"/>
+                            </RadzenStack>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="status-display stopped">
+                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text=@BeamStatus class="custom-badge"></RadzenBadge>
+                            <RadzenButton Click="@StartBeam" class="btn-start">
+                                <RadzenIcon Icon="play_arrow" /> Démarrer
+                            </RadzenButton>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Students Section -->
+    <section class="students-section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <RadzenIcon Icon="group" style="margin-right: 10px;" />
+                    Gestion des élèves
+                </h2>
+                <p class="section-description">Gérez vos élèves et consultez leurs enregistrements</p>
+            </div>
+            
+            <div class="student-toggle">
+                <RadzenSelectBar TValue="int" Size="ButtonSize.Medium" @bind-Value="@selectedStudentMenu" class="custom-toggle">
+                    <Items>
+                        <RadzenSelectBarItem Value="1" Text="👥 Enregistrés" />
+                        <RadzenSelectBarItem Value="2" Text="➕ Nouveau" />
+                    </Items>
+                </RadzenSelectBar>
+            </div>
+
+            @if (selectedStudentMenu == 2)
+            {
+                <div class="new-student-container animate-fade-in">
+                    <div class="new-student-card">
+                        <h3 class="card-title">
+                            <RadzenIcon Icon="person_add" />
+                            Créer un nouvel élève
+                        </h3>
+                        
+                        <RadzenTemplateForm TItem="Student" Data=@newStudentModel Submit=@OnStudentSubmit InvalidSubmit=@OnStudentInvalidSubmit>
+                            <RadzenStack Gap="1rem" class="rz-p-sm-12">
+                                
+                                <!-- First Name -->
+                                <RadzenFormField Text="Prénom">
+                                    <ChildContent>
+                                        <RadzenTextBox Name="FirstName" @bind-Value=@newStudentModel.FirstName class="form-input" />
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="FirstName" Text="Le prénom est requis." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Last Name -->
+                                <RadzenFormField Text="Nom de famille">
+                                    <ChildContent>
+                                        <RadzenTextBox Name="LastName" @bind-Value=@newStudentModel.LastName class="form-input" />
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="LastName" Text="Le nom de famille est requis." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Age -->
+                                <RadzenFormField Text="Âge">
+                                    <ChildContent>
+                                        <RadzenNumeric Name="Age" @bind-Value=@newStudentModel.Age Min="0" Max="120" class="form-input" />
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="Age" Text="L'âge est requis." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Lunette -->
+                                <RadzenFormField Text="Porte des lunettes ?">
+                                    <ChildContent>
+                                        <RadzenRadioButtonList Name="Lunette" @bind-Value=@newStudentModel.Lunette TValue="int">
+                                            <Items>
+                                                <RadzenRadioButtonListItem Text="Non" Value="1" />
+                                                <RadzenRadioButtonListItem Text="Oui" Value="2" />
+                                            </Items>
+                                        </RadzenRadioButtonList>
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="Lunette" Text="Champ obligatoire." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Theme -->
+                                <RadzenFormField Text="Thème préféré">
+                                    <ChildContent>
+                                        <RadzenRadioButtonList Name="Theme" @bind-Value=@newStudentModel.Theme TValue="int">
+                                            <Items>
+                                                <RadzenRadioButtonListItem Text="Défaut" Value="1" />
+                                                <RadzenRadioButtonListItem Text="Pompier" Value="2" />
+                                                <RadzenRadioButtonListItem Text="Planète" Value="3" />
+                                            </Items>
+                                        </RadzenRadioButtonList>
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Remarque -->
+                                <RadzenFormField Text="Remarque">
+                                    <ChildContent>
+                                        <RadzenTextArea Name="Remarque" @bind-Value=@newStudentModel.Remarque Rows="3" class="form-textarea" />
+                                    </ChildContent>
+                                    <Helper>
+                                        <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire." />
+                                    </Helper>
+                                </RadzenFormField>
+                                
+                                <!-- Actions -->
+                                <div class="form-actions">
+                                    <RadzenButton ButtonStyle="ButtonStyle.Danger" 
+                                                Click=@EraseStudent 
+                                                ButtonType="ButtonType.Button"
+                                                class="btn-action">
+                                        <RadzenIcon Icon="delete" /> Effacer
+                                    </RadzenButton>
+                                    <RadzenButton ButtonType="ButtonType.Submit" 
+                                                ButtonStyle="ButtonStyle.Success"
+                                                class="btn-action btn-save">
+                                        <RadzenIcon Icon="check" /> Enregistrer
+                                    </RadzenButton>
+                                </div>
+                                
+                            </RadzenStack>
+                        </RadzenTemplateForm>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="students-grid">
+                @foreach (var student in Students)
+                {
+                    <div class="student-card animate-fade-in">
+                        <div class="student-header">
+                            <div class="student-avatar">
+                                @student.FirstName.Substring(0, 1)@student.LastName.Substring(0, 1)
+                            </div>
+                            <div class="student-info">
+                                <h3 class="student-name">@student.FirstName @student.LastName</h3>
+                                <p class="student-id">ID: @student.Id.Substring(0, 8)...</p>
+                            </div>
+                        </div>
+                        
+                        <div class="student-actions">
+                            @if (CalibrationService.clientId == student.Id)
+                            {
+                                <div class="processing-indicator">
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text="En cours de traitement" class="custom-badge"></RadzenBadge>
+                                    <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Warning" Value="100" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" AriaLabel="Processing" />
+                                </div>
+                            }
+                            else if (ContainsId(student.Id))
+                            {
+                                <div class="processing-indicator">
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Base" Text="En attente" class="custom-badge"></RadzenBadge>
+                                    <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Base" Value="100" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" AriaLabel="Waiting" />
+                                </div>
+                            }
+                            else
+                            {
+                                var readings = Db.Readings.Where(r => r.StudentId == student.Id).Include(r => r.TextRecord).ToList();
+                                
+                                <div class="action-buttons">
+                                    @if (readings.Any())
+                                    {
+                                        <RadzenButton ButtonStyle="ButtonStyle.Info" Click="args => ShowReadings(student, readings)" class="btn-consult">
+                                            <RadzenIcon Icon="visibility" style="margin-right: 4px;" />
+                                            Consulter (@readings.Count)
+                                        </RadzenButton>
+                                    }
+                                    <RadzenButton ButtonStyle="ButtonStyle.Secondary" Click="args => Modify(student)" class="btn-modify">
+                                        <RadzenIcon Icon="edit" />
+                                    </RadzenButton>
+                                    <RadzenButton ButtonStyle="ButtonStyle.Danger" Click="args => Delete(student)" class="btn-delete">
+                                        <RadzenIcon Icon="delete" />
+                                    </RadzenButton>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                
+                @if (!Students.Any())
+                {
+                    <div class="empty-state">
+                        <RadzenIcon Icon="person_add" style="font-size: 4rem; color: #ccc; margin-bottom: 1rem;" />
+                        <p class="empty-text">Aucun élève enregistré</p>
+                        <p class="empty-subtext">Créez votre premier élève en cliquant sur "Nouveau"</p>
+                    </div>
+                }
+            </div>
+            }
+        </div>
+    </section>
+
+    <!-- Texts Section -->
+    <section class="texts-section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <RadzenIcon Icon="description" style="margin-right: 10px;" />
+                    Textes de lecture
+                </h2>
+                <p class="section-description">Créez et gérez vos textes pour les sessions de lecture</p>
+            </div>
+            
+            <div class="text-toggle">
+                <RadzenSelectBar TValue="int" Size="ButtonSize.Medium" @bind-Value="@selectedTextMenu" class="custom-toggle">
+                    <Items>
+                        <RadzenSelectBarItem Value="1" Text="📚 Enregistrés" />
+                        <RadzenSelectBarItem Value="2" Text="➕ Nouveau" />
+                    </Items>
+                </RadzenSelectBar>
+            </div>
+
+            @if (selectedTextMenu == 2)
+            {
+                <div class="new-text-container animate-fade-in">
+                    <div class="new-text-card">
+                        <h3 class="card-title">
+                            <RadzenIcon Icon="note_add" />
+                            Créer un nouveau texte
+                        </h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Nom du texte</label>
+                            <RadzenTextBox Placeholder="Ex: Lecture du jour, Poème..." 
+                                         ValueChanged=@(args => OnChangeTextTitle(args))
+                                         class="form-input" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Contenu du texte</label>
+                            <RadzenTextArea Placeholder="Saisissez votre texte ici..." 
+                                          Rows="12" 
+                                          ValueChanged=@(args => OnChangeTextContent(args))
+                                          class="form-textarea" />
+                        </div>
+                        
+                        @if (!string.IsNullOrEmpty(imageBase64))
+                        {
+                            <div class="text-preview">
+                                <h4 class="preview-title">Aperçu</h4>
+                                <RadzenImage Path="@($"data:image/jpeg;base64,{imageBase64}")" 
+                                           AlternateText="Aperçu du texte" 
+                                           class="preview-image" />
+                            </div>
+                            
+                            <div class="form-actions">
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" 
+                                            Click=@EraseText 
+                                            class="btn-action">
+                                    <RadzenIcon Icon="delete" /> Effacer
+                                </RadzenButton>
+                                <RadzenButton ButtonStyle="ButtonStyle.Secondary" 
+                                            Click=@GenererImage 
+                                            class="btn-action">
+                                    <RadzenIcon Icon="refresh" /> Regénérer
+                                </RadzenButton>
+                                <RadzenButton ButtonStyle="ButtonStyle.Success" 
+                                            Click=@SaveText 
+                                            class="btn-action btn-save">
+                                    <RadzenIcon Icon="check" /> Enregistrer
+                                </RadzenButton>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="form-actions">
+                                <RadzenButton ButtonStyle="ButtonStyle.Success" 
+                                            Click=@GenererImage 
+                                            class="btn-action btn-generate">
+                                    <RadzenIcon Icon="image" /> Générer le texte
+                                </RadzenButton>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="texts-grid">
+                    @foreach (var textR in TextRecords)
+                    {
+                        <div class="text-card animate-fade-in">
+                            <div class="text-card-header">
+                                <h3 class="text-card-title">@textR.Name</h3>
+                            </div>
+                            <div class="text-card-image">
+                                <RadzenImage Path="@(textR.FilePath+"/image.png")" 
+                                           AlternateText=@textR.Name 
+                                           Style="width: 100%; border-radius: 8px;" />
+                            </div>
+                            <div class="text-card-footer">
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" 
+                                            Click="args => DeleteText(textR)"
+                                            class="btn-delete-text">
+                                    <RadzenIcon Icon="delete" /> Supprimer
+                                </RadzenButton>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (!TextRecords.Any())
+                    {
+                        <div class="empty-state">
+                            <RadzenIcon Icon="description" style="font-size: 4rem; color: #ccc; margin-bottom: 1rem;" />
+                            <p class="empty-text">Aucun texte enregistré</p>
+                            <p class="empty-subtext">Créez votre premier texte en cliquant sur "Nouveau"</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+</div>
+
+<style>
+    /* Import Eurostile Font */
+    @@font-face {
+        font-family: 'Eurostile';
+        src: url('/fonts/EurostileExtendedBlack.ttf') format('truetype');
+    }
+
+    .teacher-panel-container {
+        width: 100%;
+        min-height: 100vh;
+        background: #f8f9fa;
+    }
+
+    /* Hero Section */
+    .teacher-hero {
+        position: relative;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 3rem 2rem;
+        text-align: center;
+        overflow: hidden;
+    }
+
+    .hero-gradient {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.1) 0%, transparent 70%);
+    }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .page-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: clamp(2rem, 5vw, 3rem);
+        color: white;
+        margin: 0 0 0.5rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+    }
+
+    .page-subtitle {
+        font-size: 1.1rem;
+        color: rgba(255, 255, 255, 0.9);
+        margin: 0;
+    }
+
+    /* Status Section */
+    .status-section {
+        padding: 2rem;
+        background: white;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .section-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .status-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+    }
+
+    .status-header {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .status-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .status-info h3 {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.4rem;
+        margin: 0 0 0.3rem 0;
+        color: #333;
+    }
+
+    .status-description {
+        margin: 0;
+        color: #666;
+        font-size: 0.95rem;
+    }
+
+    .status-content {
+        padding-top: 1rem;
+        border-top: 1px solid #e9ecef;
+    }
+
+    .status-display {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .custom-badge {
+        font-size: 1rem !important;
+        padding: 0.5rem 1rem !important;
+    }
+
+    .status-buttons {
+        display: flex;
+        gap: 0.8rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-restart, .btn-stop, .btn-start {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Students Section */
+    .students-section, .texts-section {
+        padding: 3rem 2rem;
+    }
+
+    .section-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+    }
+
+    .section-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 2rem;
+        color: #333;
+        margin: 0 0 0.5rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .section-description {
+        color: #666;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .student-toggle {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .new-student-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    .new-student-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+    }
+
+    .students-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.5rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .student-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+
+    .student-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .student-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .student-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+
+    .student-info {
+        flex: 1;
+    }
+
+    .student-name {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.1rem;
+        margin: 0 0 0.3rem 0;
+        color: #333;
+    }
+
+    .student-id {
+        font-size: 0.85rem;
+        color: #999;
+        margin: 0;
+        font-family: monospace;
+    }
+
+    .student-actions {
+        min-height: 50px;
+    }
+
+    .processing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-consult {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .btn-modify, .btn-delete {
+        width: 40px;
+        padding: 0 !important;
+    }
+
+    /* Text Section */
+    .texts-section {
+        background: white;
+    }
+
+    .text-toggle {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .custom-toggle {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        border-radius: 50px;
+    }
+
+    .new-text-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .new-text-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+    }
+
+    .card-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.5rem;
+        color: #333;
+        margin: 0 0 2rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .form-input, .form-textarea {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        padding: 0.8rem;
+        font-size: 1rem;
+        transition: border 0.3s ease;
+    }
+
+    .form-input:focus, .form-textarea:focus {
+        border-color: #667eea;
+        outline: none;
+    }
+
+    .text-preview {
+        margin: 2rem 0;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .preview-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.1rem;
+        margin: 0 0 1rem 0;
+        color: #333;
+    }
+
+    .preview-image {
+        width: 100%;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        margin-top: 1.5rem;
+    }
+
+    .btn-action {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.5rem !important;
+    }
+
+    .btn-generate, .btn-save {
+        font-weight: 600;
+    }
+
+    .texts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .text-card {
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+
+    .text-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .text-card-header {
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .text-card-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.2rem;
+        color: white;
+        margin: 0;
+    }
+
+    .text-card-image {
+        padding: 1rem;
+        background: #f8f9fa;
+    }
+
+    .text-card-footer {
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .btn-delete-text {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Empty State */
+    .empty-state {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-text {
+        font-size: 1.3rem;
+        color: #666;
+        margin: 0 0 0.5rem 0;
+        font-weight: 500;
+    }
+
+    .empty-subtext {
+        font-size: 1rem;
+        color: #999;
+        margin: 0;
+    }
+
+    /* Animations */
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .teacher-hero {
+            padding: 2rem 1rem;
+        }
+
+        .status-section, .students-section, .texts-section {
+            padding: 2rem 1rem;
+        }
+
+        .students-grid, .texts-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .status-display {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .action-buttons {
+            width: 100%;
+        }
+
+        .btn-consult {
+            flex: 1 1 100%;
+        }
+    }
+</style>
+
+@code {
+
+    private List<Student> Students;
+    private List<TextRecord> TextRecords;
+    
+    private Timer _timer;
+    private string BeamStatus = "Inconnu";
+    private int selectedTextMenu = 1;
+    private int selectedStudentMenu = 1;
+    private string newTextTitle;
+    private string newTextContent;
+    private Student newStudentModel = new Student();
+    
+    private string imageBase64 = "";
+    private List<ResultatOCR> resultats = new();
+    
+    bool ContainsId(string id)
+    {
+        return CalibrationService._queue.Any(item => item.Item1 == id);
+    }
+    
+    bool IsReadingProcessing(string readingId)
+    {
+        // Vérifier si le readingId correspond à celui en cours de traitement
+        // Le clientId actuel est stocké dans CalibrationService.clientId
+        // et la queue contient les paires (clientId, textRecordFilePath)
+        
+        // On cherche dans la base de données si ce reading existe et correspond au client en cours
+        var reading = Db.Readings.FirstOrDefault(r => r.Id == readingId);
+        if (reading == null) return false;
+        
+        // Vérifier si ce reading est en cours de traitement
+        return CalibrationService.clientId == reading.StudentId ||
+               CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
+    }
+    
+    private async Task GenererImage()
+    {
+        try
+        {
+            int largeur = 1920;
+            int hauteur = 1080;
+
+            using var bitmap = new SKBitmap(largeur, hauteur);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+
+            var paint = new SKPaint
+            {
+                Color = SKColors.Black,
+                TextSize = 64,
+                IsAntialias = true
+            };
+
+            float y = 120;
+            float lineHeight = 90;
+            float margin = 50;
+            float maxWidth = largeur - 2 * margin;
+            
+            Console.WriteLine(newTextContent);
+
+            var words = newTextContent.Split(' ');
+            var line = "";
+
+            foreach (var word in words)
+            {
+                var testLine = string.IsNullOrEmpty(line) ? word : line + " " + word;
+                var width = paint.MeasureText(testLine);
+                if (width < maxWidth)
+                    line = testLine;
+                else
+                {
+                    canvas.DrawText(line, margin, y, paint);
+                    line = word;
+                    y += lineHeight;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(line))
+                canvas.DrawText(line, margin, y, paint);
+
+            using var image = SKImage.FromBitmap(bitmap);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            var bytes = data.ToArray();
+            imageBase64 = Convert.ToBase64String(bytes);
+
+            await AnalyserImage(bytes);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur génération image : " + ex.Message);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AnalyserImage(byte[] imageBytes)
+    {
+        try
+        {
+            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
+            resultats.Clear();
+
+            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "'", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "-", "_", "—", "…", "/", "\\", "|" };
+
+            using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
+            using var pix = Pix.LoadFromMemory(imageBytes);
+            using var page = engine.Process(pix);
+            using var iter = page.GetIterator();
+
+            iter.Begin();
+            int lineNum = 0;
+            float prevRight = 0;
+            float espace = 0;
+
+            do
+            {
+                if (iter.IsAtBeginningOf(PageIteratorLevel.TextLine))
+                {
+                    lineNum++;
+                    prevRight = 0;
+                }
+
+                if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var rect))
+                {
+                    string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
+                    float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
+
+                    if (string.IsNullOrEmpty(mot) || mot.Any(c => symbols.Contains(c.ToString())))
+                        continue;
+
+                    if (prevRight > 0)
+                    {
+                        espace = rect.X1 - prevRight;
+                        if (espace < 0) espace = rect.X1 / 2f;
+                    }
+                    else
+                    {
+                        espace = 0;
+                    }
+
+                    resultats.Add(new ResultatOCR
+                    {
+                        Mot = mot,
+                        X = (int)(rect.X1 - (espace / 2f)),
+                        Y = rect.Y1,
+                        Largeur = (int)(rect.Width + espace),
+                        Hauteur = rect.Height,
+                        Ligne = lineNum,
+                        Espace = (int)espace,
+                        Confiance = (int)conf
+                    });
+
+                    prevRight = rect.X2;
+                }
+
+            } while (iter.Next(PageIteratorLevel.Word));
+            
+            Console.WriteLine("OCR terminé et CSV exporté automatiquement !");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur OCR : " + ex.Message);
+        }
+    }
+
+    private async Task ExporterCSV(string path)
+    {
+        try
+        {
+            var csv = new StringBuilder();
+            csv.AppendLine("mot,x,y,largeur,hauteur,ligne,espace,confiance");
+
+            foreach (var r in resultats)
+            {
+                csv.AppendLine($"{r.Mot},{r.X},{r.Y},{r.Largeur},{r.Hauteur},{r.Ligne},{r.Espace},{r.Confiance}");
+            }
+
+            string outputPath = "wwwroot/" + path + "/resultats_ocr.csv";
+            await File.WriteAllTextAsync(outputPath, csv.ToString(), Encoding.UTF8);
+
+            Console.WriteLine($"CSV généré : {outputPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur export CSV : " + ex.Message);
+        }
+    }
+
+    private class ResultatOCR
+    {
+        public string Mot { get; set; } = "";
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Largeur { get; set; }
+        public int Hauteur { get; set; }
+        public int Ligne { get; set; }
+        public int Espace { get; set; }
+        public int Confiance { get; set; }
+    };
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        _timer = new Timer(5000); // toutes les 5 secondes
+        _timer.Elapsed += OnTimerElapsed;
+        _timer.AutoReset = true;
+        _timer.Start();
+
+        Students = new List<Student>(Db.Students.AsEnumerable());
+        TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
+        bool running = IsProcessRunning("BeamEyeTracker");
+    }
+
+    private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
+    {
+        bool running = IsProcessRunning("BeamEyeTracker");
+    }
+    
+    bool IsProcessRunning(string name)
+    {
+        foreach (var process in  Process.GetProcessesByName(name))
+        {
+            if (process.ProcessName == name)
+            {
+                BeamStatus = "En cours";
+                InvokeAsync(StateHasChanged);
+                return true;
+            }
+        }
+        BeamStatus = "Arrêté";
+        InvokeAsync(StateHasChanged);
+        return false;
+    }
+    
+    void StartBeam()
+    {
+        BeamStatus = "Démarrage en cours...";
+        InvokeAsync(StateHasChanged);
+        var psi = new ProcessStartInfo
+        {
+            FileName = "C:\\Program Files\\Eyeware\\BeamEyeTracker\\BeamEyeTracker.exe",
+            Arguments = "",
+            WorkingDirectory = @"C:\Program Files\Eyeware\BeamEyeTracker",
+            UseShellExecute = true // obligatoire si pas de redirection
+        };
+
+        Process.Start(psi);
+    }
+    
+    void RestartBeam()
+    {
+        BeamStatus = "Redémarrage...";
+        InvokeAsync(StateHasChanged);
+        StopBeam();
+        StartBeam();
+    }
+    
+    void StopBeam()
+    {
+        BeamStatus = "Arrêt en cours...";
+        InvokeAsync(StateHasChanged);
+        foreach (var process in  Process.GetProcessesByName("BeamEyeTracker"))
+        {
+            process.Kill();
+        }
+    }
+
+    private Task Delete(Student student)
+    {
+        Students.Remove(student);
+        InvokeAsync(StateHasChanged);
+        Db.Students.Remove(student);
+        Db.SaveChanges();
+        return Task.CompletedTask;
+    }
+
+    async Task ShowReadings(Student student, List<Reading> readings)
+    {
+        // Si plusieurs lectures, afficher un dialog pour choisir
+        var result = await DialogService.OpenAsync<ReadingSelector>("Sélectionner un enregistrement", 
+            new Dictionary<string, object> { {"Student", student}, {"Readings", readings} }, 
+            new DialogOptions { Width = "600px", CloseDialogOnOverlayClick = true });
+            
+        if (result != null && result is string)
+        {
+            var readingId = result as string;
+            // Vérifier une dernière fois avant de naviguer
+            if (readingId != null && !IsReadingProcessing(readingId))
+            {
+                Navigation.NavigateTo("/show-data/" + readingId);
+            }
+        }
+    }
+
+    async Task Modify(Student student)
+    {
+        await DialogService.OpenAsync<StudentModifier>("Saisie", new Dictionary<string, object> { {"Student",student} }, new DialogOptions { CloseDialogOnOverlayClick = false});
+
+        Db.Update(student);
+        Db.SaveChanges();
+    }
+
+    private Task DeleteText(TextRecord textR)
+    {
+        TextRecords.Remove(textR);
+        InvokeAsync(StateHasChanged);
+        Db.TextRecords.Remove(textR);
+        Db.SaveChanges();
+        
+        Directory.Delete("wwwroot/" + textR.FilePath, true);
+        
+        return Task.CompletedTask;
+    }
+
+    private void OnChangeTextContent(string args)
+    {
+        newTextContent = args;
+    }
+    
+    private void OnChangeTextTitle(string args)
+    {
+        newTextTitle = args;
+    }
+
+    private void EraseText()
+    {
+        newTextContent = "";
+        newTextTitle = "";
+        imageBase64 = "";
+    }
+
+    private void EraseStudent()
+    {
+        newStudentModel = new Student();
+    }
+
+    private async Task OnStudentSubmit(Student student)
+    {
+        // Le modèle est déjà validé grâce aux RequiredValidator
+        student.Id = Guid.NewGuid().ToString("N");
+        
+        Students.Add(student);
+        Db.Students.Add(student);
+        await Db.SaveChangesAsync();
+        
+        // Créer un nouveau modèle vide pour le prochain élève
+        newStudentModel = new Student();
+        selectedStudentMenu = 1;
+        
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnStudentInvalidSubmit(FormInvalidSubmitEventArgs args)
+    {
+        // Le formulaire est invalide, les erreurs sont affichées automatiquement
+        Console.WriteLine("Formulaire invalide");
+    }
+
+    private async Task SaveText()
+    {
+        var idTemp = Guid.NewGuid().ToString("N");
+        var newText = new TextRecord(newTextContent, "textImg/" + idTemp, newTextTitle, idTemp);
+        SaveImg(imageBase64, newText.FilePath);
+        await ExporterCSV(newText.FilePath);
+        TextRecords.Add(newText);
+        Db.TextRecords.Add(newText);
+        Db.SaveChanges();
+        EraseText();
+        selectedTextMenu = 1;
+    }
+
+    private void SaveImg(string imageBase64, string path)
+    {
+        var bytes = Convert.FromBase64String(imageBase64);
+        
+        Directory.CreateDirectory("wwwroot/" + path);
+        
+        File.WriteAllBytes("wwwroot/" + path + "/image.png", bytes);
+    }
+
+}

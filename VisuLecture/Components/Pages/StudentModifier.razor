@@ -1,0 +1,114 @@
+@inject DialogService DialogService
+@using SkiaSharp
+@using System.Globalization
+@using System.Text
+@using System.Text.Json
+@using VisuLecture.Components.Model
+@inject IWebHostEnvironment Env
+@rendermode InteractiveServer
+
+<RadzenStack Gap="1rem" Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
+    <RadzenText>@editedStudent.FirstName</RadzenText>
+
+    <RadzenTemplateForm TItem="Student" Data=@editedStudent Submit=@OnSubmit>
+        <RadzenStack Gap="1rem" class="rz-p-sm-12">
+
+            <!-- First Name -->
+            <RadzenFormField Text="First Name" Variant="@variant">
+                <ChildContent>
+                    <RadzenTextBox Name="FirstName" @bind-Value=@editedStudent.FirstName/>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="FirstName" Text="First name is required."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Last Name -->
+            <RadzenFormField Text="Last Name" Variant="@variant">
+                <ChildContent>
+                    <RadzenTextBox Name="LastName" @bind-Value=@editedStudent.LastName/>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="LastName" Text="Last name is required."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Age -->
+            <RadzenFormField Text="Age" Variant="@variant">
+                <ChildContent>
+                    <RadzenNumeric Name="Age" @bind-Value=@editedStudent.Age Min="0" Max="11"/>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="Age" Text="Age is required."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Lunette -->
+            <RadzenFormField Text="Lunette" Variant="@variant">
+                <ChildContent>
+                    <RadzenRadioButtonList Name="Lunette" @bind-Value=@editedStudent.Lunette TValue="int">
+                        <Items>
+                            <RadzenRadioButtonListItem Text="Non" Value="1"/>
+                            <RadzenRadioButtonListItem Text="Oui" Value="2"/>
+                        </Items>
+                    </RadzenRadioButtonList>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="Lunette" Text="Champ obligatoire."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Theme -->
+            <RadzenFormField Text="Theme" Variant="@variant">
+                <ChildContent>
+                    <RadzenRadioButtonList Name="Theme" @bind-Value=@editedStudent.Theme TValue="int">
+                        <Items>
+                            <RadzenRadioButtonListItem Text="Defaut" Value="1"/>
+                            <RadzenRadioButtonListItem Text="Pompier" Value="2"/>
+                            <RadzenRadioButtonListItem Text="Planete" Value="3"/>
+                        </Items>
+                    </RadzenRadioButtonList>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Remarque -->
+            <RadzenFormField Text="Remarque" Variant="@variant">
+                <ChildContent>
+                    <RadzenTextArea Name="Remarque" @bind-Value=@editedStudent.Remarque Rows="3"/>
+                </ChildContent>
+                <Helper>
+                    <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire."/>
+                </Helper>
+            </RadzenFormField>
+
+            <!-- Submit -->
+            <RadzenButton ButtonType="ButtonType.Submit" Text="Enregistrer"/>
+        </RadzenStack>
+    </RadzenTemplateForm>
+
+</RadzenStack>
+
+
+@code {
+    
+    [Parameter] public Student Student { get; set; }
+    private Student editedStudent;
+    
+    Variant variant = Variant.Outlined;
+    
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        editedStudent = new Student(Student.Id, Student.FirstName, Student.LastName, Student.Age, Student.Lunette, Student.Theme, Student.Remarque);
+    }
+
+    void OnSubmit(Student stu)
+    {
+        Student.UpdateFrom(stu);
+        DialogService.Close(stu);
+    }
+}

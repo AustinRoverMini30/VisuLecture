@@ -1,6 +1,13 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+﻿@using VisuLecture.Components.Layout
+<Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)"/>
-        <FocusOnNavigate RouteData="routeData" Selector="h1"/>
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
     </Found>
+    <NotFound>
+        <PageTitle>Oups</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <p role="alert">Qui a perdu les clés de la Dolorean ? C'est vous Doc ?</p>
+        </LayoutView>
+    </NotFound>
 </Router>

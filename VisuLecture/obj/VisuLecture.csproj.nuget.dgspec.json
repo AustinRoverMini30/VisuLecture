@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\VisuLecture.csproj": {}
+    "C:\\Users\\nicol\\Downloads\\VisuLecture\\VisuLecture\\VisuLecture\\VisuLecture.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\VisuLecture.csproj": {
+    "C:\\Users\\nicol\\Downloads\\VisuLecture\\VisuLecture\\VisuLecture\\VisuLecture.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\VisuLecture.csproj",
+        "projectUniqueName": "C:\\Users\\nicol\\Downloads\\VisuLecture\\VisuLecture\\VisuLecture\\VisuLecture.csproj",
         "projectName": "VisuLecture",
-        "projectPath": "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\VisuLecture.csproj",
-        "packagesPath": "C:\\Users\\Gustavo\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Gustavo\\RiderProjects\\VisuLecture\\VisuLecture\\obj\\",
+        "projectPath": "C:\\Users\\nicol\\Downloads\\VisuLecture\\VisuLecture\\VisuLecture\\VisuLecture.csproj",
+        "packagesPath": "C:\\Users\\nicol\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\nicol\\Downloads\\VisuLecture\\VisuLecture\\VisuLecture\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Gustavo\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\nicol\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -44,15 +44,57 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "10.0.100"
       },
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
           "dependencies": {
+            "Microsoft.Data.Sqlite.Core": {
+              "target": "Package",
+              "version": "[9.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[9.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.Design": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[9.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.Sqlite": {
+              "target": "Package",
+              "version": "[9.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.Sqlite.Core": {
+              "target": "Package",
+              "version": "[9.0.11, )"
+            },
+            "OpenCvSharp4": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
+            "OpenCvSharp4.WpfExtensions": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
+            "OpenCvSharp4.runtime.win": {
+              "target": "Package",
+              "version": "[4.11.0.20250507, )"
+            },
             "Radzen.Blazor": {
               "target": "Package",
               "version": "[7.4.3, )"
+            },
+            "SkiaSharp": {
+              "target": "Package",
+              "version": "[3.119.2-preview.1, )"
+            },
+            "Tesseract": {
+              "target": "Package",
+              "version": "[5.2.0, )"
             }
           },
           "imports": [
@@ -74,7 +116,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Users\\nicol\\.dotnet\\sdk\\10.0.100/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
