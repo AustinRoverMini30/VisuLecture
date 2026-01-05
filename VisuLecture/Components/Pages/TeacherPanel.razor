@@ -1218,13 +1218,102 @@
         }
     }
 
-    private Task Delete(Student student)
+    private async Task Delete(Student student)
     {
-        Students.Remove(student);
-        InvokeAsync(StateHasChanged);
-        Db.Students.Remove(student);
-        Db.SaveChanges();
-        return Task.CompletedTask;
+        // Compter les enregistrements (readings) associés à cet élève
+        var relatedReadings = await Db.Readings
+            .Where(r => r.StudentId == student.Id)
+            .ToListAsync();
+        int readingsCount = relatedReadings.Count;
+        
+        // Construire le message de confirmation
+        string message;
+        if (readingsCount > 0)
+        {
+            message = $"⚠️ ATTENTION ⚠️\n\n" +
+                     $"La suppression de l'élève \"{student.FirstName} {student.LastName}\" entraînera également la suppression de :\n\n" +
+                     $"• {readingsCount} enregistrement(s) de lecture\n" +
+                     $"• Toutes les données de suivi oculaire associées\n\n" +
+                     $"Cette action est IRRÉVERSIBLE.\n\n" +
+                     $"Voulez-vous vraiment continuer ?";
+        }
+        else
+        {
+            message = $"Voulez-vous vraiment supprimer l'élève \"{student.FirstName} {student.LastName}\" ?\n\n" +
+                     $"Aucun enregistrement de lecture n'est associé à cet élève.";
+        }
+        
+        // Afficher la boîte de dialogue de confirmation
+        var confirmed = await DialogService.Confirm(
+            message,
+            "Confirmation de suppression",
+            new ConfirmOptions 
+            { 
+                OkButtonText = "Oui, supprimer",
+                CancelButtonText = "Annuler",
+                CloseDialogOnOverlayClick = false
+            }
+        );
+        
+        if (confirmed == true)
+        {
+            try
+            {
+                // Supprimer d'abord les enregistrements associés
+                if (readingsCount > 0)
+                {
+                    Db.Readings.RemoveRange(relatedReadings);
+                    
+                    // Supprimer les dossiers de données pour chaque reading
+                    foreach (var reading in relatedReadings)
+                    {
+                        string recordPath = Path.Combine("records", reading.Id);
+                        if (Directory.Exists(recordPath))
+                        {
+                            try
+                            {
+                                Directory.Delete(recordPath, true);
+                                Console.WriteLine($"Dossier de données supprimé : {recordPath}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Erreur lors de la suppression du dossier {recordPath} : {ex.Message}");
+                            }
+                        }
+                    }
+                }
+                
+                // Supprimer l'élève de la base de données
+                Db.Students.Remove(student);
+                await Db.SaveChangesAsync();
+                
+                // Mettre à jour l'interface
+                Students.Remove(student);
+                await InvokeAsync(StateHasChanged);
+                
+                // Notification de succès
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Suppression réussie",
+                    Detail = readingsCount > 0 
+                        ? $"Élève et {readingsCount} enregistrement(s) supprimé(s)."
+                        : "Élève supprimé avec succès.",
+                    Duration = 4000
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur lors de la suppression : {ex.Message}");
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Erreur de suppression",
+                    Detail = $"Impossible de supprimer l'élève : {ex.Message}",
+                    Duration = 5000
+                });
+            }
+        }
     }
 
     async Task ShowReadings(Student student, List<Reading> readings)
