@@ -1,2 +1,4 @@
 .idea/
-/VisuLecture/obj/Debug
+/VisuLecture/obj
+/VisuLecture/bin
+/VisuLecture/uploads
