@@ -1,4 +1,17 @@
+# IDE
 .idea/
-VisuLecture/obj
-VisuLecture/bin
-VisuLecture/uploads
+.vs/
+.vscode/
+
+# Build .NET
+**/bin/
+**/obj/
+
+# Logs
+*.log
+
+# User / machine-specific
+*.user
+*.suo
+*.userprefs
+**/Properties/launchSettings.json
