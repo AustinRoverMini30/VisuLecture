@@ -222,7 +222,15 @@
                                                 
                                                 @if (studentId == student.Id)
                                                 {
-                                                    <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="✓ Sélectionné" class="selected-badge" />
+                                                    <div class="student-actions-selected">
+                                                        <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="✓ Sélectionné" class="selected-badge" />
+                                                        <RadzenButton Click="args => ModifyStudent(student)" 
+                                                                    ButtonStyle="ButtonStyle.Secondary"
+                                                                    Size="ButtonSize.Small"
+                                                                    class="btn-modify-student">
+                                                            <RadzenIcon Icon="edit" style="font-size: 1rem;" /> Modifier
+                                                        </RadzenButton>
+                                                    </div>
                                                 }
                                                 else
                                                 {
@@ -644,12 +652,27 @@
         gap: 0.5rem;
     }
 
+    .student-actions-selected {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
     .selected-badge {
         width: 100%;
         display: flex;
         justify-content: center;
         padding: 0.8rem !important;
         font-size: 1rem !important;
+    }
+    
+    .btn-modify-student {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.3rem;
     }
 
     /* Text Carousel */
@@ -1120,12 +1143,26 @@
 
     void OnSubmit(Student model)
     {
-        
         OnChange();
         
-        Db.Students.Add(model);
+        // Vérifier si l'élève existe déjà dans la base de données
+        var existingStudent = Db.Students.FirstOrDefault(s => s.Id == model.Id);
+        
+        if (existingStudent != null)
+        {
+            // Mise à jour de l'élève existant
+            existingStudent.UpdateFrom(model);
+            Db.Students.Update(existingStudent);
+        }
+        else
+        {
+            // Création d'un nouvel élève
+            Db.Students.Add(model);
+        }
+        
         Db.SaveChanges();
 
+        // Rafraîchir la liste des élèves
         Students = new List<Student>(Db.Students.AsEnumerable());
 
         studentId = model.Id;
@@ -1174,6 +1211,15 @@
         studentId = args.Id;
         model = args;
         OnChange();
+    }
+    
+    void ModifyStudent(Student args)
+    {
+        // Sélectionner l'élève et basculer vers l'onglet INSCRIRE pour permettre la modification
+        studentId = args.Id;
+        model = args;
+        selectedStudentMenu = 1; // Basculer vers l'onglet INSCRIRE
+        StateHasChanged();
     }
 
     void SelectText(TextRecord args)
