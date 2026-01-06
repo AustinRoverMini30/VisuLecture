@@ -1,50 +1,54 @@
 @inject DialogService DialogService
-@using SkiaSharp
-@using System.Globalization
-@using System.Text
-@using System.Text.Json
 @using VisuLecture.Components.Model
-@inject IWebHostEnvironment Env
 @rendermode InteractiveServer
 
-<RadzenStack Gap="1rem" Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
-    <RadzenText>@editedStudent.FirstName</RadzenText>
+<div class="student-modifier-container">
+    <div class="modifier-header">
+        <RadzenIcon Icon="edit" style="font-size: 2rem; color: #667eea; margin-right: 0.5rem;" />
+        <h3 class="modifier-title">Modifier l'élève</h3>
+    </div>
+    
+    <div class="modifier-subtitle">
+        <RadzenText TextStyle="TextStyle.Body1" style="color: #666;">
+            @editedStudent.FirstName @editedStudent.LastName
+        </RadzenText>
+    </div>
 
     <RadzenTemplateForm TItem="Student" Data=@editedStudent Submit=@OnSubmit>
-        <RadzenStack Gap="1rem" class="rz-p-sm-12">
+        <RadzenStack Gap="1.2rem" class="rz-p-sm-12">
 
             <!-- First Name -->
-            <RadzenFormField Text="First Name" Variant="@variant">
+            <RadzenFormField Text="Prénom" Variant="@variant">
                 <ChildContent>
-                    <RadzenTextBox Name="FirstName" @bind-Value=@editedStudent.FirstName/>
+                    <RadzenTextBox Name="FirstName" @bind-Value=@editedStudent.FirstName class="form-input"/>
                 </ChildContent>
                 <Helper>
-                    <RadzenRequiredValidator Component="FirstName" Text="First name is required."/>
+                    <RadzenRequiredValidator Component="FirstName" Text="Le prénom est requis."/>
                 </Helper>
             </RadzenFormField>
 
             <!-- Last Name -->
-            <RadzenFormField Text="Last Name" Variant="@variant">
+            <RadzenFormField Text="Nom" Variant="@variant">
                 <ChildContent>
-                    <RadzenTextBox Name="LastName" @bind-Value=@editedStudent.LastName/>
+                    <RadzenTextBox Name="LastName" @bind-Value=@editedStudent.LastName class="form-input"/>
                 </ChildContent>
                 <Helper>
-                    <RadzenRequiredValidator Component="LastName" Text="Last name is required."/>
+                    <RadzenRequiredValidator Component="LastName" Text="Le nom est requis."/>
                 </Helper>
             </RadzenFormField>
 
             <!-- Age -->
-            <RadzenFormField Text="Age" Variant="@variant">
+            <RadzenFormField Text="Âge" Variant="@variant">
                 <ChildContent>
-                    <RadzenNumeric Name="Age" @bind-Value=@editedStudent.Age Min="0" Max="11"/>
+                    <RadzenNumeric Name="Age" @bind-Value=@editedStudent.Age Min="0" Max="15" class="form-input"/>
                 </ChildContent>
                 <Helper>
-                    <RadzenRequiredValidator Component="Age" Text="Age is required."/>
+                    <RadzenRequiredValidator Component="Age" Text="L'âge est requis."/>
                 </Helper>
             </RadzenFormField>
 
             <!-- Lunette -->
-            <RadzenFormField Text="Lunette" Variant="@variant">
+            <RadzenFormField Text="Porte des lunettes" Variant="@variant">
                 <ChildContent>
                     <RadzenRadioButtonList Name="Lunette" @bind-Value=@editedStudent.Lunette TValue="int">
                         <Items>
@@ -59,13 +63,12 @@
             </RadzenFormField>
 
             <!-- Theme -->
-            <RadzenFormField Text="Theme" Variant="@variant">
+            <RadzenFormField Text="Thème préféré" Variant="@variant">
                 <ChildContent>
                     <RadzenRadioButtonList Name="Theme" @bind-Value=@editedStudent.Theme TValue="int">
                         <Items>
-                            <RadzenRadioButtonListItem Text="Defaut" Value="1"/>
-                            <RadzenRadioButtonListItem Text="Pompier" Value="2"/>
-                            <RadzenRadioButtonListItem Text="Planete" Value="3"/>
+                            <RadzenRadioButtonListItem Text="Défaut" Value="1"/>
+                            <RadzenRadioButtonListItem Text="Planète" Value="2"/>
                         </Items>
                     </RadzenRadioButtonList>
                 </ChildContent>
@@ -77,19 +80,73 @@
             <!-- Remarque -->
             <RadzenFormField Text="Remarque" Variant="@variant">
                 <ChildContent>
-                    <RadzenTextArea Name="Remarque" @bind-Value=@editedStudent.Remarque Rows="3"/>
+                    <RadzenTextArea Name="Remarque" @bind-Value=@editedStudent.Remarque Rows="3" class="form-textarea"/>
                 </ChildContent>
                 <Helper>
                     <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire."/>
                 </Helper>
             </RadzenFormField>
 
-            <!-- Submit -->
-            <RadzenButton ButtonType="ButtonType.Submit" Text="Enregistrer"/>
+            <!-- Submit Buttons -->
+            <div class="form-actions">
+                <RadzenButton ButtonType="ButtonType.Submit" 
+                            ButtonStyle="ButtonStyle.Success"
+                            class="btn-submit">
+                    <RadzenIcon Icon="check" style="margin-right: 5px;" /> Enregistrer
+                </RadzenButton>
+                <RadzenButton ButtonStyle="ButtonStyle.Light" 
+                            Click="@(() => DialogService.Close(null))"
+                            class="btn-cancel">
+                    <RadzenIcon Icon="close" style="margin-right: 5px;" /> Annuler
+                </RadzenButton>
+            </div>
         </RadzenStack>
     </RadzenTemplateForm>
+</div>
 
-</RadzenStack>
+<style>
+    .student-modifier-container {
+        padding: 1rem;
+        max-width: 600px;
+    }
+    
+    .modifier-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .modifier-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.5rem;
+        color: #333;
+        margin: 0;
+    }
+    
+    .modifier-subtitle {
+        margin-bottom: 1.5rem;
+        padding-left: 2.5rem;
+    }
+    
+    .form-input, .form-textarea {
+        width: 100%;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        justify-content: flex-end;
+    }
+    
+    .btn-submit {
+        padding: 0.8rem 1.5rem;
+    }
+    
+    .btn-cancel {
+        padding: 0.8rem 1.5rem;
+    }
+</style>
 
 
 @code {
