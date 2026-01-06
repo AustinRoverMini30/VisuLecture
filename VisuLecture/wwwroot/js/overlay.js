@@ -1,18 +1,33 @@
-window.drawFollowLine = (points, lineColor = "red", pointColor = "blue") => {
-
+// Fonction utilitaire pour initialiser le canvas et obtenir le contexte avec scaling
+window.initializeCanvas = () => {
     const img = document.getElementById("backgroundImage");
     const canvas = document.getElementById("overlayCanvas");
+    
+    if (!img || !canvas) {
+        console.error("Image ou canvas introuvable");
+        return null;
+    }
+    
     const ctx = canvas.getContext("2d");
-
-    // Adapter le canvas à la taille affichée de l'image (seulement si nécessaire)
+    
+    // Adapter le canvas à la taille affichée de l'image
     if (canvas.width !== img.clientWidth || canvas.height !== img.clientHeight) {
         canvas.width = img.clientWidth;
         canvas.height = img.clientHeight;
     }
-
-    // Ratio d'échelle (image affichée → image réelle)
+    
+    // Calculer les ratios d'échelle
     const scaleX = img.clientWidth / img.naturalWidth;
     const scaleY = img.clientHeight / img.naturalHeight;
+    
+    return { ctx, img, canvas, scaleX, scaleY };
+};
+
+window.drawFollowLine = (points, lineColor = "red", pointColor = "blue") => {
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
 
     // --- Tracé de la ligne suivant les points ---
     ctx.lineWidth = 3;
@@ -53,13 +68,10 @@ window.clearOverlay = () => {
 
 // Dessine un cercle de densité
 window.drawDensityCircle = (centerX, centerY, radius, color) => {
-    const img = document.getElementById("backgroundImage");
-    const canvas = document.getElementById("overlayCanvas");
-    const ctx = canvas.getContext("2d");
-
-    // Ratio d'échelle (image affichée → image réelle)
-    const scaleX = img.clientWidth / img.naturalWidth;
-    const scaleY = img.clientHeight / img.naturalHeight;
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
 
     // Ajuster les coordonnées
     const x = centerX * scaleX;
@@ -80,13 +92,10 @@ window.drawDensityCircle = (centerX, centerY, radius, color) => {
 
 // Dessine une boîte autour d'un mot
 window.drawWordBox = (x, y, width, height, borderColor) => {
-    const img = document.getElementById("backgroundImage");
-    const canvas = document.getElementById("overlayCanvas");
-    const ctx = canvas.getContext("2d");
-
-    // Ratio d'échelle (image affichée → image réelle)
-    const scaleX = img.clientWidth / img.naturalWidth;
-    const scaleY = img.clientHeight / img.naturalHeight;
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
 
     // Ajuster les coordonnées et dimensions
     const scaledX = x * scaleX;

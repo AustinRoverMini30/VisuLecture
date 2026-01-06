@@ -158,6 +158,7 @@
     private bool isRawVisible = false;
     private bool isDensityVisible = false;
     private bool isWordBoxVisible = false;
+    private bool _firstRenderComplete = false;
     [Parameter] public string readingId { get; set; }
     
     private Reading reading;
@@ -232,6 +233,18 @@
                 
                 await JS.InvokeVoidAsync("drawDensityCircle", centerX, centerY, radius, color);
             }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_firstRenderComplete && resultats != null)
+        {
+            _firstRenderComplete = true;
+            // Attendre un peu que l'image soit complètement chargée et le canvas dimensionné
+            await Task.Delay(100);
+            // Redessiner l'overlay avec le canvas correctement dimensionné
+            await UpdateOverlay();
         }
     }
 
