@@ -173,8 +173,7 @@
                                                         <RadzenRadioButtonList Name="Theme" @bind-Value=@model.Theme TValue="int">
                                                             <Items>
                                                                 <RadzenRadioButtonListItem Text="Défaut" Value="1" />
-                                                                <RadzenRadioButtonListItem Text="Pompier" Value="2" />
-                                                                <RadzenRadioButtonListItem Text="Planète" Value="3" />
+                                                                <RadzenRadioButtonListItem Text="Planète" Value="2" />
                                                             </Items>
                                                         </RadzenRadioButtonList>
                                                     </ChildContent>
@@ -371,18 +370,36 @@
     
     <!-- Calibration Overlay (toujours présent, mais visible uniquement pendant la calibration) -->
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: @(isCalibrating ? "auto" : "none"); background-color: @(isCalibrating ? "rgba(0,0,0,1)" : "transparent"); z-index: 9999;">
-        <div style="position: absolute;
-            left: @(dotX)px;
-        top: @(dotY)px;
-        width: @(dotW)px;
-        height: @(dotW)px;
-        background-color: @(isCalibrating ? "white" : "transparent");;
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        cursor: pointer;
-        pointer-events: auto;"
-             @onclick="OnDotClick">
-        </div>
+        @if (GetThemeName() == "défaut")
+        {
+            <div style="position: absolute;
+                left: @(dotX)px;
+            top: @(dotY)px;
+            width: @(dotW)px;
+            height: @(dotW)px;
+            background-color: @(isCalibrating ? "white" : "transparent");
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            pointer-events: auto;"
+                 @onclick="OnDotClick">
+            </div>
+        }
+        else
+        {
+            <img src="@GetThemeImagePath()" 
+                 style="position: absolute;
+                     left: @(dotX)px;
+                     top: @(dotY)px;
+                     width: @(dotW)px;
+                     height: @(dotW)px;
+                     transform: translate(-50%, -50%);
+                     cursor: pointer;
+                     pointer-events: auto;
+                     opacity: @(isCalibrating ? "1" : "0");"
+                 @onclick="OnDotClick"
+                 alt="Cible" />
+        }
     </div>
     
     <!-- Reading Fullscreen Overlay (pendant la lecture active) -->
@@ -1501,6 +1518,42 @@
         {
             Console.WriteLine($"Erreur lors de l'arrêt du test de la caméra: {ex.Message}");
         }
+    }
+    
+    // Méthodes pour gérer les thèmes
+    private string GetThemeName()
+    {
+        return model.Theme switch
+        {
+            1 => "défaut",
+            2 => "planets",
+            _ => "défaut"
+        };
+    }
+    
+    private string GetThemeImagePath()
+    {
+        string themeName = GetThemeName();
+        
+        if (themeName == "défaut")
+        {
+            return ""; // Ne devrait pas arriver, mais par sécurité
+        }
+        
+        // Sélectionner une image aléatoire ou en fonction de la position actuelle
+        // Pour simplifier, on utilise la position actuelle pour varier les images
+        int imageIndex = currentPosition % 5; // On suppose qu'il y a 5 images (0-4)
+        
+        if (themeName == "planets")
+        {
+            // Les images planet.png, planet1.png, planet2.png, planet3.png, planet4.png
+            if (imageIndex == 0)
+                return $"/pictures/themes/{themeName}/planet.png";
+            else
+                return $"/pictures/themes/{themeName}/planet{imageIndex}.png";
+        }
+        
+        return ""; // Fallback
     }
 
 }

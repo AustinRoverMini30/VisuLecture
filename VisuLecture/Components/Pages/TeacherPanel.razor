@@ -167,8 +167,7 @@
                                         <RadzenRadioButtonList Name="Theme" @bind-Value=@newStudentModel.Theme TValue="int">
                                             <Items>
                                                 <RadzenRadioButtonListItem Text="Défaut" Value="1" />
-                                                <RadzenRadioButtonListItem Text="Pompier" Value="2" />
-                                                <RadzenRadioButtonListItem Text="Planète" Value="3" />
+                                                <RadzenRadioButtonListItem Text="Planète" Value="2" />
                                             </Items>
                                         </RadzenRadioButtonList>
                                     </ChildContent>
@@ -315,8 +314,8 @@
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Nom</label>
-                            <RadzenTextBox Placeholder="Ex: Lecture du jour, Poème..."
+                            <label class="form-label">Nom du texte</label>
+                            <RadzenTextBox Name="TextTitle" Placeholder="Ex: Lecture du jour, Poème..." 
                                            ValueChanged=@(args => OnChangeTextTitle(args))
                                            class="form-input" />
                         </div>
@@ -975,26 +974,29 @@
             int largeur = 1920;
             int hauteur = 1080;
 
-            using var bitmap = new SKBitmap(largeur, hauteur);
-            using var canvas = new SKCanvas(bitmap);
-            canvas.Clear(SKColors.White);
+        using var bitmap = new SKBitmap(largeur, hauteur);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
 
-            var paint = new SKPaint
-            {
-                Color = SKColors.Black,
-                TextSize = 64,
-                IsAntialias = true
-            };
+        var paint = new SKPaint
+        {
+            Color = SKColors.Black,
+            TextSize = 64,
+            IsAntialias = true
+        };
 
-            float y = 120;
-            float lineHeight = 90;
-            float margin = 50;
-            float maxWidth = largeur - 2 * margin;
-            
-            Console.WriteLine(newTextContent);
+        float margin = 50;
+        float topMargin = 100;
+        float bottomMargin = 30; // ✅ marge basse réduite
+        float maxWidth = largeur - (2 * margin);
 
             var words = (newTextContent ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var line = "";
+        // ================================
+        // 1) Découpage du texte en lignes
+        // ================================
+        var lines = new List<string>();
+        string currentLine = "";
 
             foreach (var word in words)
             {

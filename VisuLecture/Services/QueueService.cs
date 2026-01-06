@@ -144,6 +144,9 @@ public class CalibrationService : BackgroundService
                 }
                 if (!cleanFirstElement)
                 {
+                    
+                    //Console.WriteLine(temp.UnifiedScreenGaze.PointOfRegard.X + " " + temp.UnifiedScreenGaze.PointOfRegard.Y);
+                    
                     gazePoints.Add(new PointGaze(temp.TimestampInSeconds, temp.UnifiedScreenGaze.PointOfRegard.X, temp.UnifiedScreenGaze.PointOfRegard.Y));
                 }
             }
