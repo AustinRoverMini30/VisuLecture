@@ -217,7 +217,7 @@ def detectJumps(points, width, height, average_speed, width_coeff=1, height_coef
         result.append(Point(p.timestamp, p.x, p.y, False))
         return result, jump_segments
 
-    n = len(points)
+    n = len(points) 
     i = 0
 
     while i < n - 1:
