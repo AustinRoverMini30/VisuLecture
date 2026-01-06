@@ -1,0 +1,99 @@
+﻿@using VisuLecture.Components.Pages
+@inject DialogService DialogService
+
+<div class="dialog-container">
+    <div class="dialog-header">
+        <RadzenIcon Icon="warning" style="margin-right: 10px; font-size: 1.5rem; color: #ffc107;" />
+        <h3 class="dialog-title">Liste des mots non lus (@Mots.Count mots)</h3>
+    </div>
+    
+    <div class="dialog-content">
+        <RadzenDataGrid Data="@Mots" TItem="ShowData.Resultat" AllowSorting="true" AllowPaging="true" PageSize="20" class="mots-grid">
+            <Columns>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="mot" Title="Mot" Width="250px">
+                    <Template Context="data">
+                        <span class="mot-label">@data.mot</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="ligne" Title="Ligne" Width="100px" TextAlign="TextAlign.Center" />
+            </Columns>
+        </RadzenDataGrid>
+    </div>
+    
+    <div class="dialog-footer">
+        <div class="info-message">
+            <RadzenIcon Icon="info" style="margin-right: 5px; color: #17a2b8;" />
+            <span>Ces mots n'ont reçu aucun point de fixation pendant la lecture.</span>
+        </div>
+        <RadzenButton Text="Fermer" Click="@(() => DialogService.Close())" ButtonStyle="ButtonStyle.Secondary" />
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<ShowData.Resultat> Mots { get; set; } = new();
+}
+
+<style>
+    .dialog-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 2px solid #e9ecef;
+        background: linear-gradient(135deg, #fff9e6 0%, #ffe6b3 100%);
+    }
+    
+    .dialog-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.3rem;
+        color: #1d0050;
+        margin: 0;
+    }
+    
+    .dialog-content {
+        flex: 1;
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+    
+    .dialog-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .info-message {
+        display: flex;
+        align-items: center;
+        font-size: 0.9rem;
+        color: #666;
+        font-style: italic;
+    }
+    
+    .mots-grid {
+        width: 100%;
+    }
+    
+    .mot-label {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 1rem;
+        font-style: italic;
+    }
+    
+    .position-text {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: #666;
+    }
+</style>
+

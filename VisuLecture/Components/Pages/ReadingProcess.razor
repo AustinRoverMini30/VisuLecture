@@ -1014,7 +1014,7 @@
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
-    
+
     // Variables pour la gestion des caméras
     private List<CameraDevice> availableCameras = new List<CameraDevice>();
     private string selectedCameraId = "";
@@ -1052,14 +1052,14 @@
     protected override void OnInitialized()
     {
         base.OnInitialized();
-        
+
         Students = new List<Student>(Db.Students.AsEnumerable());
         TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
-        
+
         // Nettoyer les enregistrements orphelins
         CleanOrphanRecords();
     }
-    
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -1088,10 +1088,10 @@
         {
             // Récupérer tous les IDs de lecture existants dans la DB
             var existingReadingIds = Db.Readings.Select(r => r.Id).ToHashSet();
-            
+
             // Nettoyer le dossier records
             CleanOrphanDirectory("records", existingReadingIds);
-            
+
             // Nettoyer le dossier uploads
             CleanOrphanDirectory("uploads", existingReadingIds);
         }
@@ -1100,26 +1100,26 @@
             Console.WriteLine($"Erreur lors du nettoyage des enregistrements orphelins: {ex.Message}");
         }
     }
-    
+
     private void CleanOrphanDirectory(string directoryName, HashSet<string> existingReadingIds)
     {
         try
         {
             string directoryPath = Path.Combine(Directory.GetCurrentDirectory(), directoryName);
-            
+
             if (!Directory.Exists(directoryPath))
             {
                 Console.WriteLine($"Le dossier '{directoryName}' n'existe pas.");
                 return;
             }
-            
+
             // Parcourir tous les sous-dossiers
             var subDirectories = Directory.GetDirectories(directoryPath);
-            
+
             foreach (var dir in subDirectories)
             {
                 var dirName = Path.GetFileName(dir);
-                
+
                 // Si le dossier ne correspond à aucun ID de lecture dans la DB
                 if (!existingReadingIds.Contains(dirName))
                 {
@@ -1144,10 +1144,10 @@
     void OnSubmit(Student model)
     {
         OnChange();
-        
+
         // Vérifier si l'élève existe déjà dans la base de données
         var existingStudent = Db.Students.FirstOrDefault(s => s.Id == model.Id);
-        
+
         if (existingStudent != null)
         {
             // Mise à jour de l'élève existant
@@ -1159,7 +1159,7 @@
             // Création d'un nouvel élève
             Db.Students.Add(model);
         }
-        
+
         Db.SaveChanges();
 
         // Rafraîchir la liste des élèves
@@ -1212,7 +1212,7 @@
         model = args;
         OnChange();
     }
-    
+
     void ModifyStudent(Student args)
     {
         // Sélectionner l'élève et basculer vers l'onglet INSCRIRE pour permettre la modification
@@ -1226,15 +1226,15 @@
     {
         textRecordId = args.Id;
         textRecord = args;
-        
+
         // Créer un nouvel enregistrement de lecture
         var reading = new Reading(studentId, args.Id);
         Db.Readings.Add(reading);
         Db.SaveChanges();
-        
+
         // Stocker l'ID de la lecture pour l'utiliser dans le processus de calibration
         readingId = reading.Id;
-        
+
         OnChange();
     }
 
@@ -1289,7 +1289,7 @@
         else
         {
             isCalibrating = false;
-            
+
             // Rétablir la scrollbar
             await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = '';");
 
@@ -1381,7 +1381,7 @@
         {
             // Masquer la scrollbar
             await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = 'hidden';");
-            
+
             isReading = true;
             await startRecording2();
 
@@ -1391,7 +1391,7 @@
         {
             // Rétablir la scrollbar
             await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = '';");
-            
+
             await stopRecording2();
             await uploadVideo2();
 
@@ -1442,7 +1442,7 @@
         if (stepSelected > 0)
         {
             stepSelected--;
-            
+
             // Si on revient à l'étape caméra, arrêter le test en cours
             if (stepSelected == 0 && isCameraTesting)
             {
@@ -1462,7 +1462,7 @@
             await StopCameraTest();
             await JSRuntime.InvokeVoidAsync("setSelectedCamera", selectedCameraId);
         }
-        
+
         if (stepSelected < 4)
         {
             stepSelected++;
@@ -1470,14 +1470,14 @@
 
         OnChange();
     }
-    
+
     // Classe pour représenter un périphérique caméra
     public class CameraDevice
     {
         public string DeviceId { get; set; }
         public string Label { get; set; }
     }
-    
+
     // Méthode pour initialiser la liste des caméras
     private async Task LoadAvailableCameras()
     {
@@ -1487,14 +1487,14 @@
             var cameras = await JSRuntime.InvokeAsync<List<CameraDevice>>("getAvailableCameras");
             availableCameras = cameras ?? new List<CameraDevice>();
             Console.WriteLine($"LoadAvailableCameras: {availableCameras.Count} caméra(s) trouvée(s)");
-            
+
             if (availableCameras.Count > 0)
             {
                 selectedCameraId = availableCameras[0].DeviceId;
                 selectedCameraLabel = availableCameras[0].Label;
                 Console.WriteLine($"LoadAvailableCameras: caméra sélectionnée = {selectedCameraLabel}");
             }
-            
+
             StateHasChanged();
         }
         catch (Exception ex)
@@ -1502,7 +1502,7 @@
             Console.WriteLine($"Erreur lors du chargement des caméras: {ex.Message}");
         }
     }
-    
+
     // Méthode appelée quand l'utilisateur change de caméra
     private async Task OnCameraChange(object value)
     {
@@ -1513,17 +1513,17 @@
         {
             selectedCameraLabel = camera.Label;
         }
-        
+
         // Si un test était en cours, l'arrêter
         if (isCameraTesting)
         {
             await StopCameraTest();
             isCameraTesting = false;
         }
-        
+
         OnChange();
     }
-    
+
     // Méthode pour tester la caméra sélectionnée
     private async Task TestCamera()
     {
@@ -1534,25 +1534,25 @@
             Console.WriteLine("TestCamera terminé avec succès");
             upButtonStat = true;
             StateHasChanged();
-            
-            
+
+
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Erreur lors du test de la caméra: {ex.Message}");
         }
     }
-    
+
     // Méthode appelée quand on clique sur le bouton TESTER
     private async Task TestCameraButton()
     {
         isCameraTesting = true;
         StateHasChanged();
-        
+
         await Task.Delay(100); // Petit délai pour que l'UI se mette à jour
         await TestCamera();
     }
-    
+
     // Méthode pour arrêter le test de la caméra
     private async Task StopCameraTest()
     {
@@ -1565,7 +1565,7 @@
             Console.WriteLine($"Erreur lors de l'arrêt du test de la caméra: {ex.Message}");
         }
     }
-    
+
     // Méthodes pour gérer les thèmes
     private string GetThemeName()
     {
@@ -1576,20 +1576,20 @@
             _ => "défaut"
         };
     }
-    
+
     private string GetThemeImagePath()
     {
         string themeName = GetThemeName();
-        
+
         if (themeName == "défaut")
         {
             return ""; // Ne devrait pas arriver, mais par sécurité
         }
-        
+
         // Sélectionner une image aléatoire ou en fonction de la position actuelle
         // Pour simplifier, on utilise la position actuelle pour varier les images
         int imageIndex = currentPosition % 5; // On suppose qu'il y a 5 images (0-4)
-        
+
         if (themeName == "planets")
         {
             // Les images planet.png, planet1.png, planet2.png, planet3.png, planet4.png
@@ -1598,8 +1598,9 @@
             else
                 return $"/pictures/themes/{themeName}/planet{imageIndex}.png";
         }
-        
+
         return ""; // Fallback
     }
 
+}
 }

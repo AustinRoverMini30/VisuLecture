@@ -7,6 +7,7 @@
 @using CsvHelper
 @using CsvHelper.Configuration
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 @inject IJSRuntime JS
 @inject AppDbContext Db
 @inject NavigationManager Navigation
@@ -47,13 +48,15 @@
                             <div class="stat-label">Total mots</div>
                             <div class="stat-value">@totalMots</div>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item stat-clickable" @onclick="() => ShowMotsLusModal()">
                             <div class="stat-label">Mots lus</div>
                             <div class="stat-value stat-success">@motsLus</div>
+                            <div class="stat-hint">Cliquez pour voir la liste</div>
                         </div>
-                        <div class="stat-item">
+                        <div class="stat-item stat-clickable" @onclick="() => ShowMotsNonLusModal()">
                             <div class="stat-label">Mots non lus</div>
                             <div class="stat-value stat-warning">@motsNonLus</div>
+                            <div class="stat-hint">Cliquez pour voir la liste</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-label">Pourcentage lu</div>
@@ -100,6 +103,11 @@
                     <div class="control-group">
                         <RadzenCheckBox @bind-Value=@isWordBoxVisible Change="@UpdateOverlay" TValue="bool" />
                         <RadzenLabel Text="Boîtes autour des mots" class="control-label cyan-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isThickenLinesEnabled Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Épaissir les traits (selon espacement)" class="control-label orange-label" />
                     </div>
                     
                     <div class="control-group">
@@ -158,6 +166,7 @@
     private bool isRawVisible = false;
     private bool isDensityVisible = false;
     private bool isWordBoxVisible = false;
+    private bool isThickenLinesEnabled = false;
     private bool _firstRenderComplete = false;
     [Parameter] public string readingId { get; set; }
     
@@ -174,6 +183,9 @@
     private double moyenneFixations;
     private double moyenneDureeFixation;
     private int vitesseLecture;
+    
+    // Variables pour le filtre des mots
+    private int selectedWordFilter = 1; // 1 = mots lus uniquement, 2 = tous les mots
     
     private async Task UpdateOverlay()
     {
@@ -194,14 +206,28 @@
         // Dessiner les courbes PAR-DESSUS
         if (isRawVisible && pointsRaw != null && pointsRaw.Count > 0)
         {
-            var jsPointsRaw = pointsRaw.Select(p => new { x = p.x, y = p.y }).ToList();
-            await JS.InvokeVoidAsync("drawFollowLine", jsPointsRaw, "red", "blue");
+            if (isThickenLinesEnabled)
+            {
+                await DrawThickenedLine(pointsRaw, "red", "blue");
+            }
+            else
+            {
+                var jsPointsRaw = pointsRaw.Select(p => new { x = p.x, y = p.y }).ToList();
+                await JS.InvokeVoidAsync("drawFollowLine", jsPointsRaw, "red", "blue");
+            }
         }
         
         if (isAffineVisible && points != null && points.Count > 0)
         {
-            var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
-            await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
+            if (isThickenLinesEnabled)
+            {
+                await DrawThickenedLine(points, "green", "yellow");
+            }
+            else
+            {
+                var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
+                await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
+            }
         }
     }
 
@@ -481,6 +507,99 @@
         }
     }
     
+    private async Task DrawThickenedLine(List<(double x, double y)> pointsList, string lineColor, string pointColor)
+    {
+        if (pointsList.Count < 2) return;
+        
+        // Calculer les distances entre points consécutifs et créer les segments
+        var segments = new List<object>();
+        
+        for (int i = 0; i < pointsList.Count - 1; i++)
+        {
+            var p1 = pointsList[i];
+            var p2 = pointsList[i + 1];
+            
+            // Calculer la distance euclidienne entre les deux points
+            double distance = Math.Sqrt(Math.Pow(p2.x - p1.x, 2) + Math.Pow(p2.y - p1.y, 2));
+            
+            // Calculer l'épaisseur en fonction de la distance
+            // Distance faible = trait épais (fixation longue)
+            // Distance élevée = trait fin (mouvement rapide)
+            double lineWidth;
+            
+            if (distance < 10)
+                lineWidth = 50;  // Très épais - très peu de mouvement
+            else if (distance < 30)
+                lineWidth = 30;  // Épais - mouvement lent
+            else if (distance < 70)
+                lineWidth = 10;  // Moyen - mouvement normal
+            else if (distance < 150)
+                lineWidth = 5;  // Fin - mouvement rapide
+            else
+                lineWidth = 1;  // Très fin - saccade ou saut
+            
+            segments.Add(new
+            {
+                x1 = p1.x,
+                y1 = p1.y,
+                x2 = p2.x,
+                y2 = p2.y,
+                width = lineWidth
+            });
+        }
+        
+        // Dessiner les segments avec épaisseur variable
+        await JS.InvokeVoidAsync("drawThickenedLine", segments, lineColor);
+        
+        // Dessiner les points par-dessus
+        var jsPoints = pointsList.Select(p => new { x = p.x, y = p.y }).ToList();
+        foreach (var point in jsPoints)
+        {
+            await JS.InvokeVoidAsync("drawPoint", point.x, point.y, pointColor, 4);
+        }
+    }
+    
+    // ------------------- MÉTHODES UTILITAIRES POUR LE TABLEAU -------------------
+    
+    private IEnumerable<Resultat> GetFilteredWords()
+    {
+        if (resultats == null) return Enumerable.Empty<Resultat>();
+        
+        return selectedWordFilter == 1 
+            ? resultats.Where(r => r.nbMot > 0) // Mots lus uniquement
+            : resultats; // Tous les mots
+    }
+    
+    private double CalculerPourcentageLecture(int nbPoints)
+    {
+        if (nbPoints == 0) return 0;
+        
+        // Calcul basé sur une échelle : 
+        // 0 points = 0%, 1-2 points = 20%, 3-5 points = 50%, 6-10 points = 75%, 10+ points = 100%
+        if (nbPoints >= 10) return 100;
+        if (nbPoints >= 6) return 75;
+        if (nbPoints >= 3) return 50;
+        if (nbPoints >= 1) return 20;
+        return 0;
+    }
+    
+    private string GetProgressColor(double pourcentage)
+    {
+        if (pourcentage >= 75) return "#28a745"; // Vert
+        if (pourcentage >= 50) return "#ffc107"; // Jaune
+        if (pourcentage >= 20) return "#fd7e14"; // Orange
+        return "#dc3545"; // Rouge
+    }
+    
+    private BadgeStyle GetBadgeStyle(int nbPoints)
+    {
+        if (nbPoints == 0) return BadgeStyle.Light;
+        if (nbPoints <= 2) return BadgeStyle.Info;
+        if (nbPoints <= 5) return BadgeStyle.Primary;
+        if (nbPoints <= 10) return BadgeStyle.Warning;
+        return BadgeStyle.Danger;
+    }
+    
     // ------------------- DATA LOADING -------------------
     private static List<T> ReadCsv<T>(string path, CsvConfiguration config)
     {
@@ -492,6 +611,44 @@
     private void GoBack()
     {
         Navigation.NavigateTo("/teacher-panel");
+    }
+    
+    // ------------------- MODALES -------------------
+    
+    private async Task ShowMotsLusModal()
+    {
+        if (resultats == null) return;
+        
+        var motsLusList = resultats.Where(r => r.nbMot > 0).OrderByDescending(r => r.nbMot).ToList();
+        
+        await DialogService.OpenAsync<MotsLusDialog>("Mots lus", 
+            new Dictionary<string, object> { 
+                { "Mots", motsLusList } 
+            },
+            new DialogOptions { 
+                Width = "800px", 
+                Height = "600px",
+                Resizable = true,
+                Draggable = true
+            });
+    }
+    
+    private async Task ShowMotsNonLusModal()
+    {
+        if (resultats == null) return;
+        
+        var motsNonLusList = resultats.Where(r => r.nbMot == 0).OrderBy(r => r.ligne).ThenBy(r => r.x).ToList();
+        
+        await DialogService.OpenAsync<MotsNonLusDialog>("Mots non lus", 
+            new Dictionary<string, object> { 
+                { "Mots", motsNonLusList } 
+            },
+            new DialogOptions { 
+                Width = "600px", 
+                Height = "500px",
+                Resizable = true,
+                Draggable = true
+            });
     }
 }
 
@@ -608,6 +765,23 @@
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         border-color: #3a0099;
     }
+    
+    .stat-item.stat-clickable {
+        cursor: pointer;
+        position: relative;
+    }
+    
+    .stat-item.stat-clickable:hover {
+        border-color: #667eea;
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stat-hint {
+        font-size: 0.75rem;
+        color: #999;
+        margin-top: 0.3rem;
+        font-style: italic;
+    }
 
     .stat-label {
         font-size: 0.9rem;
@@ -702,6 +876,10 @@
         color: #00bcd4 !important;
     }
 
+    .orange-label {
+        color: #ff9800 !important;
+    }
+
     .btn-back {
         background: linear-gradient(135deg, #1d0050 0%, #3a0099 100%);
         border: none;
@@ -745,6 +923,113 @@
         left: 0;
         top: 0;
         pointer-events: none;
+    }
+
+    /* Word Details Section */
+    .word-details-section {
+        padding: 2rem;
+        background: transparent;
+    }
+
+    .word-details-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .word-details-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+    }
+
+    .word-details-header {
+        display: flex;
+        align-items: center;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f0f8ff 0%, #e0f0ff 100%);
+        border-bottom: 2px solid #b3d9ff;
+    }
+
+    .word-details-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.3rem;
+        color: #1d0050;
+        margin: 0;
+    }
+
+    .filter-controls {
+        padding: 1.5rem 1.5rem 1rem;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .custom-toggle {
+        width: 100%;
+    }
+
+    .table-container {
+        padding: 1.5rem;
+        overflow-x: auto;
+    }
+
+    .modern-grid {
+        width: 100%;
+        border: none;
+        box-shadow: none;
+    }
+
+    .mot-lu {
+        font-weight: 600;
+        color: #28a745;
+    }
+
+    .mot-non-lu {
+        font-weight: 400;
+        color: #6c757d;
+        font-style: italic;
+    }
+
+    .temps-fixation {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #3a0099;
+    }
+
+    .progress-cell {
+        position: relative;
+        width: 100%;
+        height: 25px;
+        background: #e9ecef;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        transition: width 0.3s ease;
+        border-radius: 5px;
+    }
+
+    .progress-text {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #333;
+        z-index: 1;
+    }
+
+    .position-info {
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: #6c757d;
     }
 
     /* Animations */
