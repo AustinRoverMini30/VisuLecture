@@ -305,9 +305,9 @@
                         
                         <div class="form-group">
                             <label class="form-label">Nom du texte</label>
-                            <RadzenTextBox Placeholder="Ex: Lecture du jour, Poème..." 
-                                         ValueChanged=@(args => OnChangeTextTitle(args))
-                                         class="form-input" />
+                            <RadzenTextBox Name="TextTitle" Placeholder="Ex: Lecture du jour, Poème..." 
+                                           ValueChanged=@(args => OnChangeTextTitle(args))
+                                           class="form-input" />
                         </div>
                         
                         <div class="form-group">
@@ -923,66 +923,92 @@
                CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
     }
     
-    private async Task GenererImage()
+private async Task GenererImage()
+{
+    try
     {
-        try
+        int largeur = 1920;
+        int hauteur = 1080;
+
+        using var bitmap = new SKBitmap(largeur, hauteur);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+
+        var paint = new SKPaint
         {
-            int largeur = 1920;
-            int hauteur = 1080;
+            Color = SKColors.Black,
+            TextSize = 64,
+            IsAntialias = true
+        };
 
-            using var bitmap = new SKBitmap(largeur, hauteur);
-            using var canvas = new SKCanvas(bitmap);
-            canvas.Clear(SKColors.White);
+        float margin = 50;
+        float topMargin = 100;
+        float bottomMargin = 30; // ✅ marge basse réduite
+        float maxWidth = largeur - (2 * margin);
 
-            var paint = new SKPaint
+        // ================================
+        // 1) Découpage du texte en lignes
+        // ================================
+        var words = newTextContent.Split(' ');
+        var lines = new List<string>();
+        string currentLine = "";
+
+        foreach (var word in words)
+        {
+            var testLine = string.IsNullOrEmpty(currentLine)
+                ? word
+                : currentLine + " " + word;
+
+            if (paint.MeasureText(testLine) <= maxWidth)
             {
-                Color = SKColors.Black,
-                TextSize = 64,
-                IsAntialias = true
-            };
-
-            float y = 120;
-            float lineHeight = 90;
-            float margin = 50;
-            float maxWidth = largeur - 2 * margin;
-            
-            Console.WriteLine(newTextContent);
-
-            var words = newTextContent.Split(' ');
-            var line = "";
-
-            foreach (var word in words)
-            {
-                var testLine = string.IsNullOrEmpty(line) ? word : line + " " + word;
-                var width = paint.MeasureText(testLine);
-                if (width < maxWidth)
-                    line = testLine;
-                else
-                {
-                    canvas.DrawText(line, margin, y, paint);
-                    line = word;
-                    y += lineHeight;
-                }
+                currentLine = testLine;
             }
-
-            if (!string.IsNullOrEmpty(line))
-                canvas.DrawText(line, margin, y, paint);
-
-            using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            var bytes = data.ToArray();
-            imageBase64 = Convert.ToBase64String(bytes);
-
-            await AnalyserImage(bytes);
+            else
+            {
+                lines.Add(currentLine);
+                currentLine = word;
+            }
         }
-        catch (Exception ex)
+
+        if (!string.IsNullOrEmpty(currentLine))
+            lines.Add(currentLine);
+
+        // ================================
+        // 2) Calcul de l'espacement vertical
+        // ================================
+        float availableHeight = hauteur - topMargin - bottomMargin;
+        float lineHeight = availableHeight / lines.Count;
+
+        // Point de départ précis (baseline)
+        float y = topMargin + paint.TextSize;
+
+        // ================================
+        // 3) Dessin du texte
+        // ================================
+        foreach (var line in lines)
         {
-            Console.WriteLine("Erreur génération image : " + ex.Message);
+            canvas.DrawText(line, margin, y, paint);
+            y += lineHeight;
         }
 
-        await InvokeAsync(StateHasChanged);
+        // ================================
+        // 4) Encodage de l'image
+        // ================================
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+
+        var bytes = data.ToArray();
+        imageBase64 = Convert.ToBase64String(bytes);
+
+        await AnalyserImage(bytes);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Erreur génération image : " + ex.Message);
     }
 
+    await InvokeAsync(StateHasChanged);
+}
     private async Task AnalyserImage(byte[] imageBytes)
     {
         try
@@ -1496,6 +1522,18 @@
     private async Task SaveText()
     {
         var idTemp = Guid.NewGuid().ToString("N");
+        
+        if (string.IsNullOrWhiteSpace(newTextTitle))
+        {
+            newTextTitle = "NC";
+        }
+        
+        if (string.IsNullOrWhiteSpace(newTextContent) || string.IsNullOrWhiteSpace(imageBase64))
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", "Le contenu du texte et l'image sont requis");
+            return;
+        }
+        
         var newText = new TextRecord(newTextContent, "textImg/" + idTemp, newTextTitle, idTemp);
         SaveImg(imageBase64, newText.FilePath);
         await ExporterCSV(newText.FilePath);

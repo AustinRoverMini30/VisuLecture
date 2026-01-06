@@ -84,12 +84,12 @@
                 <div class="controls-content">
                     <div class="control-group">
                         <RadzenCheckBox @bind-Value=@isRawVisible Change="@UpdateOverlay" TValue="bool" />
-                        <RadzenLabel Text="Données calibrées" class="control-label green-label" />
+                        <RadzenLabel Text="Données calibrées" class="control-label red-label" />
                     </div>
                     
                     <div class="control-group">
                         <RadzenCheckBox @bind-Value=@isAffineVisible Change="@UpdateOverlay" TValue="bool" />
-                        <RadzenLabel Text="Données brutes" class="control-label red-label" />
+                        <RadzenLabel Text="Données brutes" class="control-label green-label" />
                     </div>
                     
                     <div class="control-group">
@@ -223,13 +223,7 @@
                 double opacity = Math.Min(0.4 + (r.nbMot * 0.06), 0.85);
                 
                 // Couleur en fonction de l'intensité (du vert au rouge)
-                string color;
-                if (r.nbMot <= 5)
-                    color = $"rgba(0, 255, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Vert
-                else if (r.nbMot <= 15)
-                    color = $"rgba(255, 165, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Orange
-                else
-                    color = $"rgba(255, 0, 0, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})"; // Rouge
+                string color = $"rgba(0, 0, 255, {opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)})";
                 
                 await JS.InvokeVoidAsync("drawDensityCircle", centerX, centerY, radius, color);
             }
