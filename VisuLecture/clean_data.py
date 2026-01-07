@@ -151,12 +151,6 @@ def isJumpNew(
     averageReadingSpeed, height_coef, width_coef,
     fps=30, width=1920, height=1080
 ):
-    def compute_speeds(pts):
-        return [((pts[i].x - pts[i - 1].x)**2 + (pts[i].y - pts[i - 1].y)**2)**0.5 for i in range(1, len(pts))]
-
-    def compute_accelerations(sp):
-        return [sp[i] - sp[i - 1] for i in range(1, len(sp))]
-
     if len(nextPoints) > 1 and average_speed([currentPoint, nextPoints[1]]) < 1000:
         return False, 0
 
@@ -207,6 +201,12 @@ def isJumpNew(
                 return True, interval_size
 
     return False, 0
+
+def compute_speeds(pts):
+        return [((pts[i].x - pts[i - 1].x)**2 + (pts[i].y - pts[i - 1].y)**2)**0.5 for i in range(1, len(pts))]
+
+def compute_accelerations(sp):
+        return [sp[i] - sp[i - 1] for i in range(1, len(sp))]
 
 def detectJumps(points, width, height, average_speed, width_coeff=1, height_coeff=1):
     result = []
@@ -329,8 +329,39 @@ def getJumps(points, width, height, nbLines, lines, max_iterations=15, fps=30):
 
         if iteration == 0:
             returned_points = points
-
+    print("Saccades :" , detectSaccades(points))    
     return normalize_points_to_lines(returned_points, lines)
+
+def detectSaccades(points):
+    max_speed = 900
+    max_accel = 250
+    groups = []
+
+    i = 0
+    while i + 3 < len(points):
+        g = [points[i], points[i + 1], points[i + 2], points[i + 3]]
+
+        if g[0].jump or g[1].jump or g[2].jump or g[3].jump:
+            i += 4
+            continue
+
+        groups.append(g)
+        i += 4
+
+    outliers = []
+    for g in groups:
+        speeds = compute_speeds(g)            # vitesses
+        accels = compute_accelerations(speeds)  # accélérations
+        print("Speed of the group", speeds)
+        print("Accels of the group", accels)
+        if max(speeds) > max_speed or max(accels) > max_accel:
+            g[0].saccade = True
+            g[1].saccade = True
+            g[2].saccade = True
+            g[3].saccade = True
+            outliers.append(g)
+
+    return outliers
 
 def average_speed(nextPoints, fps=30):
     if len(nextPoints) < 2:
