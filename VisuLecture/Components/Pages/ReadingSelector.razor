@@ -3,6 +3,8 @@
 @inject CalibrationService CalibrationService
 @inject AppDbContext Db
 @using VisuLecture.Components.Controller
+@using System.Timers
+@implements IDisposable
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
     <RadzenText TextStyle="TextStyle.H5">Sélectionnez un enregistrement pour @Student.FirstName @Student.LastName</RadzenText>
@@ -10,8 +12,8 @@
     <RadzenDataList Data="@Readings" TItem="Reading" style="width: 100%">
         <Template Context="reading">
             @{
-                var isCurrentlyProcessing = CalibrationService.clientId == reading.StudentId;
-                var isInQueue = CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
+                var isCurrentlyProcessing = CalibrationService.clientId == reading.Id;
+                var isInQueue = CalibrationService._queue.Any(item => item.Item1 == reading.Id);
                 var isBlocked = isCurrentlyProcessing || isInQueue;
             }
             <RadzenCard Style="margin-bottom: 1rem;">
@@ -66,6 +68,32 @@
     [Parameter]
     public List<Reading> Readings { get; set; }
     
+    private Timer? _refreshTimer;
+    
+    protected override void OnInitialized()
+    {
+        // Timer pour rafraîchir l'affichage toutes les 500ms
+        _refreshTimer = new Timer(500);
+        _refreshTimer.Elapsed += OnRefreshTimer;
+        _refreshTimer.AutoReset = true;
+        _refreshTimer.Start();
+    }
+    
+    private void OnRefreshTimer(object? sender, ElapsedEventArgs e)
+    {
+        // Rafraîchir l'UI
+        InvokeAsync(StateHasChanged);
+    }
+    
+    public void Dispose()
+    {
+        if (_refreshTimer != null)
+        {
+            _refreshTimer.Stop();
+            _refreshTimer.Dispose();
+        }
+    }
+    
     bool IsReadingProcessing(string readingId)
     {
         // Vérifier si le readingId correspond à celui en cours de traitement
@@ -73,8 +101,8 @@
         if (reading == null) return false;
         
         // Vérifier si ce reading est en cours de traitement
-        return CalibrationService.clientId == reading.StudentId ||
-               CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
+        return CalibrationService.clientId == reading.Id ||
+               CalibrationService._queue.Any(item => item.Item1 == reading.Id);
     }
     
     async Task DeleteReading(Reading reading)

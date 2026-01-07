@@ -7,7 +7,6 @@
 @using Microsoft.EntityFrameworkCore
 @using SkiaSharp
 @using Tesseract
-@using Microsoft.AspNetCore.Components.Forms
 @using VisuLecture.Components.Controller
 @using VisuLecture.Components.Model
 @using Orientation = Radzen.Orientation
@@ -167,8 +166,7 @@
                                         <RadzenRadioButtonList Name="Theme" @bind-Value=@newStudentModel.Theme TValue="int">
                                             <Items>
                                                 <RadzenRadioButtonListItem Text="Défaut" Value="1" />
-                                                <RadzenRadioButtonListItem Text="Pompier" Value="2" />
-                                                <RadzenRadioButtonListItem Text="Planète" Value="3" />
+                                                <RadzenRadioButtonListItem Text="Planète" Value="2" />
                                             </Items>
                                         </RadzenRadioButtonList>
                                     </ChildContent>
@@ -434,7 +432,6 @@
             }
         </div>
     </section>
-
 </div>
 
 <style>
@@ -936,19 +933,14 @@
     private string BeamStatus = "Inconnu";
     private int selectedTextMenu = 1;
     private int selectedStudentMenu = 1;
-
-    // NOUVEAU: 1 = Texte, 2 = Image
-    private int selectedInputMode = 1;
-
     private string newTextTitle;
     private string newTextContent;
     private Student newStudentModel = new Student();
     
-    private string imageBase64 = "";
-
-    // NOUVEAU: bytes de l’image uploadée (normalisée en PNG)
+    private int selectedInputMode = 1;
     private byte[]? uploadedImageBytes = null;
-
+    
+    private string imageBase64 = "";
     private List<ResultatOCR> resultats = new();
     
     bool ContainsId(string id)
@@ -958,17 +950,20 @@
     
     bool IsReadingProcessing(string readingId)
     {
+        // Vérifier si le readingId correspond à celui en cours de traitement
+        // Le clientId actuel est stocké dans CalibrationService.clientId
+        // et la queue contient les paires (clientId, textRecordFilePath)
+        
+        // On cherche dans la base de données si ce reading existe et correspond au client en cours
         var reading = Db.Readings.FirstOrDefault(r => r.Id == readingId);
         if (reading == null) return false;
         
+        // Vérifier si ce reading est en cours de traitement
         return CalibrationService.clientId == reading.StudentId ||
                CalibrationService._queue.Any(item => item.Item1 == reading.StudentId);
     }
-
-    // =========================
-    // MODE TEXTE => génération image (inchangé)
-    // =========================
-    private async Task GenererImage()
+    
+private async Task GenererImage()
 {
     try
     {
@@ -1054,207 +1049,80 @@
 
     await InvokeAsync(StateHasChanged);
 }
-
-    // =========================
-    // MODE IMAGE => upload + OCR
-    // =========================
-    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    private async Task AnalyserImage(byte[] imageBytes)
     {
         try
         {
-            var file = e.File;
-            if (file == null) return;
+            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
+            resultats.Clear();
 
-            const long maxSize = 10 * 1024 * 1024; // 10MB
+            // Caractères spéciaux à retirer (SANS apostrophes et tirets)
+            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
 
-            using var ms = new MemoryStream();
-            await file.OpenReadStream(maxSize).CopyToAsync(ms);
-            var rawBytes = ms.ToArray();
+            using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
+            using var pix = Pix.LoadFromMemory(imageBytes);
+            using var page = engine.Process(pix);
+            using var iter = page.GetIterator();
 
-            // Normaliser en PNG (et resize type 1920x1080 comme ton generator)
-            var pngBytes = NormalizeToPng(rawBytes, targetWidth: 1920, targetHeight: 1080);
+            iter.Begin();
+            int lineNum = 0;
+            float prevRight = 0;
+            float espace = 0;
 
-            uploadedImageBytes = pngBytes;
-            imageBase64 = Convert.ToBase64String(pngBytes);
+            do
+            {
+                if (iter.IsAtBeginningOf(PageIteratorLevel.TextLine))
+                {
+                    lineNum++;
+                    prevRight = 0;
+                }
 
-            await AnalyserImage(pngBytes);
+                if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var rect))
+                {
+                    string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
+                    float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
 
-            await InvokeAsync(StateHasChanged);
+                    // Nettoyer le mot en retirant tous les caractères spéciaux
+                    string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
+                    
+                    // Ignorer si le mot est vide après nettoyage ou ne contient que des symboles
+                    if (string.IsNullOrWhiteSpace(motNettoye))
+                        continue;
+
+                    if (prevRight > 0)
+                    {
+                        espace = rect.X1 - prevRight;
+                        if (espace < 0) espace = rect.X1 / 2f;
+                    }
+                    else
+                    {
+                        espace = 0;
+                    }
+
+                    resultats.Add(new ResultatOCR
+                    {
+                        Mot = motNettoye,
+                        X = (int)(rect.X1 - (espace / 2f)),
+                        Y = rect.Y1,
+                        Largeur = (int)(rect.Width + espace),
+                        Hauteur = rect.Height,
+                        Ligne = lineNum,
+                        Espace = (int)espace,
+                        Confiance = (int)conf
+                    });
+
+                    prevRight = rect.X2;
+                }
+
+            } while (iter.Next(PageIteratorLevel.Word));
+            
+            Console.WriteLine("OCR terminé et CSV exporté automatiquement !");
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Erreur upload image : " + ex.Message);
+            Console.WriteLine("Erreur OCR : " + ex.Message);
         }
     }
-
-    private async Task ReRunOcrOnCurrentImage()
-    {
-        try
-        {
-            if (uploadedImageBytes == null || uploadedImageBytes.Length == 0)
-                return;
-
-            await AnalyserImage(uploadedImageBytes);
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Erreur relance OCR : " + ex.Message);
-        }
-    }
-
-    private byte[] NormalizeToPng(byte[] inputBytes, int? targetWidth = null, int? targetHeight = null)
-    {
-        using var input = SKBitmap.Decode(inputBytes);
-        if (input == null)
-            return inputBytes;
-
-        SKBitmap bmpToSave = input;
-
-        if (targetWidth.HasValue && targetHeight.HasValue &&
-            (input.Width != targetWidth.Value || input.Height != targetHeight.Value))
-        {
-            var resized = new SKBitmap(targetWidth.Value, targetHeight.Value);
-            using var canvas = new SKCanvas(resized);
-            canvas.Clear(SKColors.White);
-
-            var scale = Math.Min(
-                targetWidth.Value / (float)input.Width,
-                targetHeight.Value / (float)input.Height
-            );
-
-            var newW = (int)(input.Width * scale);
-            var newH = (int)(input.Height * scale);
-            var x = (targetWidth.Value - newW) / 2;
-            var y = (targetHeight.Value - newH) / 2;
-
-            var dest = new SKRect(x, y, x + newW, y + newH);
-            canvas.DrawBitmap(input, dest);
-
-            bmpToSave = resized;
-        }
-
-        using var img = SKImage.FromBitmap(bmpToSave);
-        using var data = img.Encode(SKEncodedImageFormat.Png, 100);
-        return data.ToArray();
-    }
-
-    // =========================
-    // OCR (inchangé)
-    // =========================
-    private async Task<bool> AnalyserImage(byte[] imageBytes)
-{
-    try
-    {
-        string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
-
-        // ✅ Vérifs explicites (sinon tu exportes un CSV vide sans comprendre)
-        if (!Directory.Exists(tessDataPath))
-            throw new DirectoryNotFoundException($"tessdata introuvable : {tessDataPath}");
-
-        if (!File.Exists(Path.Combine(tessDataPath, "fra.traineddata")))
-            throw new FileNotFoundException($"fra.traineddata introuvable dans : {tessDataPath}");
-
-        resultats.Clear();
-
-        var symbols = new HashSet<string>
-        {
-            "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|"
-        };
-
-        using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
-
-        using var pix = Pix.LoadFromMemory(imageBytes);
-        using var page = engine.Process(pix);
-
-        // ✅ Ultra utile pour debug : si ça retourne vide => OCR KO / image KO
-        var fullText = page.GetText();
-        Console.WriteLine("Tesseract full text:");
-        Console.WriteLine(fullText);
-
-        using var iter = page.GetIterator();
-        iter.Begin();
-
-        int lineNum = 0;
-        float prevRight = 0;
-        float espace = 0;
-
-        do
-        {
-            if (iter.IsAtBeginningOf(PageIteratorLevel.TextLine))
-            {
-                lineNum++;
-                prevRight = 0;
-            }
-
-            if (iter.TryGetBoundingBox(PageIteratorLevel.Word, out var rect))
-            {
-                string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
-                float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
-
-                string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
-                if (string.IsNullOrWhiteSpace(motNettoye))
-                    continue;
-
-                if (prevRight > 0)
-                {
-                    espace = rect.X1 - prevRight;
-                    if (espace < 0) espace = rect.X1 / 2f;
-                }
-                else
-                {
-                    espace = 0;
-                }
-
-                resultats.Add(new ResultatOCR
-                {
-                    Mot = motNettoye,
-                    X = (int)(rect.X1 - (espace / 2f)),
-                    Y = rect.Y1,
-                    Largeur = (int)(rect.Width + espace),
-                    Hauteur = rect.Height,
-                    Ligne = lineNum,
-                    Espace = (int)espace,
-                    Confiance = (int)conf
-                });
-
-                prevRight = rect.X2;
-            }
-
-        } while (iter.Next(PageIteratorLevel.Word));
-
-        Console.WriteLine($"OCR terminé: {resultats.Count} mots détectés.");
-
-        if (resultats.Count == 0)
-        {
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Warning,
-                Summary = "OCR vide",
-                Detail = "Tesseract n’a détecté aucun mot (image trop petite/floue, mauvais contraste, rotation, etc.).",
-                Duration = 6000
-            });
-        }
-
-        await Task.CompletedTask;
-        return resultats.Count > 0;
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine("Erreur OCR : " + ex);
-
-        NotificationService.Notify(new NotificationMessage
-        {
-            Severity = NotificationSeverity.Error,
-            Summary = "Erreur OCR",
-            Detail = ex.Message,
-            Duration = 8000
-        });
-
-        return false;
-    }
-}
-
 
     private async Task ExporterCSV(string path)
     {
@@ -1418,11 +1286,13 @@
 
     private async Task Delete(Student student)
     {
+        // Compter les enregistrements (readings) associés à cet élève
         var relatedReadings = await Db.Readings
             .Where(r => r.StudentId == student.Id)
             .ToListAsync();
         int readingsCount = relatedReadings.Count;
         
+        // Construire le message de confirmation
         string message;
         if (readingsCount > 0)
         {
@@ -1439,6 +1309,7 @@
                      $"Aucun enregistrement de lecture n'est associé à cet élève.";
         }
         
+        // Afficher la boîte de dialogue de confirmation
         var confirmed = await DialogService.Confirm(
             message,
             "Confirmation de suppression",
@@ -1454,10 +1325,12 @@
         {
             try
             {
+                // Supprimer d'abord les enregistrements associés
                 if (readingsCount > 0)
                 {
                     Db.Readings.RemoveRange(relatedReadings);
                     
+                    // Supprimer les dossiers de données pour chaque reading
                     foreach (var reading in relatedReadings)
                     {
                         string recordPath = Path.Combine("records", reading.Id);
@@ -1476,12 +1349,15 @@
                     }
                 }
                 
+                // Supprimer l'élève de la base de données
                 Db.Students.Remove(student);
                 await Db.SaveChangesAsync();
                 
+                // Mettre à jour l'interface
                 Students.Remove(student);
                 await InvokeAsync(StateHasChanged);
                 
+                // Notification de succès
                 NotificationService.Notify(new NotificationMessage
                 {
                     Severity = NotificationSeverity.Success,
@@ -1508,6 +1384,7 @@
 
     async Task ShowReadings(Student student, List<Reading> readings)
     {
+        // Si plusieurs lectures, afficher un dialog pour choisir
         var result = await DialogService.OpenAsync<ReadingSelector>("Sélectionner un enregistrement", 
             new Dictionary<string, object> { {"Student", student}, {"Readings", readings} }, 
             new DialogOptions { Width = "600px", CloseDialogOnOverlayClick = true });
@@ -1515,6 +1392,7 @@
         if (result != null && result is string)
         {
             var readingId = result as string;
+            // Vérifier une dernière fois avant de naviguer
             if (readingId != null && !IsReadingProcessing(readingId))
             {
                 Navigation.NavigateTo("/show-data/" + readingId);
@@ -1532,11 +1410,13 @@
 
     private async Task DeleteText(TextRecord textR)
     {
+        // Compter les enregistrements (readings) associés à ce texte
         var relatedReadings = await Db.Readings
             .Where(r => r.TextId == textR.Id)
             .ToListAsync();
         int readingsCount = relatedReadings.Count;
         
+        // Construire le message de confirmation
         string message;
         if (readingsCount > 0)
         {
@@ -1554,6 +1434,7 @@
                      $"Le dossier et les fichiers associés seront également supprimés.";
         }
         
+        // Afficher la boîte de dialogue de confirmation
         var confirmed = await DialogService.Confirm(
             message,
             "Confirmation de suppression",
@@ -1569,10 +1450,12 @@
         {
             try
             {
+                // Supprimer d'abord les enregistrements associés
                 if (readingsCount > 0)
                 {
                     Db.Readings.RemoveRange(relatedReadings);
                     
+                    // Supprimer les dossiers de données pour chaque reading
                     foreach (var reading in relatedReadings)
                     {
                         string recordPath = Path.Combine("records", reading.Id);
@@ -1591,9 +1474,11 @@
                     }
                 }
                 
+                // Supprimer le TextRecord de la base de données
                 Db.TextRecords.Remove(textR);
                 await Db.SaveChangesAsync();
                 
+                // Supprimer le dossier du texte
                 string textPath = Path.Combine("wwwroot", textR.FilePath);
                 if (Directory.Exists(textPath))
                 {
@@ -1601,9 +1486,11 @@
                     Console.WriteLine($"Dossier texte supprimé : {textPath}");
                 }
                 
+                // Mettre à jour l'interface
                 TextRecords.Remove(textR);
                 await InvokeAsync(StateHasChanged);
                 
+                // Notification de succès
                 NotificationService.Notify(new NotificationMessage
                 {
                     Severity = NotificationSeverity.Success,
@@ -1643,8 +1530,6 @@
         newTextContent = "";
         newTextTitle = "";
         imageBase64 = "";
-        uploadedImageBytes = null;
-        resultats.Clear();
     }
 
     private void EraseStudent()
@@ -1654,12 +1539,14 @@
 
     private async Task OnStudentSubmit(Student student)
     {
+        // Le modèle est déjà validé grâce aux RequiredValidator
         student.Id = Guid.NewGuid().ToString("N");
         
         Students.Add(student);
         Db.Students.Add(student);
         await Db.SaveChangesAsync();
         
+        // Créer un nouveau modèle vide pour le prochain élève
         newStudentModel = new Student();
         selectedStudentMenu = 1;
         
@@ -1668,50 +1555,31 @@
 
     private void OnStudentInvalidSubmit(FormInvalidSubmitEventArgs args)
     {
+        // Le formulaire est invalide, les erreurs sont affichées automatiquement
         Console.WriteLine("Formulaire invalide");
     }
 
-    // NOUVEAU: SaveText gère aussi le mode image
     private async Task SaveText()
     {
+        var idTemp = Guid.NewGuid().ToString("N");
+        
         if (string.IsNullOrWhiteSpace(newTextTitle))
         {
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Warning,
-                Summary = "Titre requis",
-                Detail = "Veuillez saisir un nom.",
-                Duration = 3000
-            });
-            return;
+            newTextTitle = "NC";
         }
-
-        if (string.IsNullOrEmpty(imageBase64))
+        
+        if (string.IsNullOrWhiteSpace(newTextContent) || string.IsNullOrWhiteSpace(imageBase64))
         {
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Warning,
-                Summary = "Aperçu manquant",
-                Detail = selectedInputMode == 1
-                    ? "Cliquez sur “Générer le texte” avant d’enregistrer."
-                    : "Veuillez importer une image avant d’enregistrer.",
-                Duration = 3000
-            });
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", "Le contenu du texte et l'image sont requis");
             return;
         }
-
-        var idTemp = Guid.NewGuid().ToString("N");
-
-        var contentToStore = selectedInputMode == 1 ? (newTextContent ?? "") : "";
-        var newText = new TextRecord(contentToStore, "textImg/" + idTemp, newTextTitle, idTemp);
-
+        
+        var newText = new TextRecord(newTextContent, "textImg/" + idTemp, newTextTitle, idTemp);
         SaveImg(imageBase64, newText.FilePath);
         await ExporterCSV(newText.FilePath);
-
         TextRecords.Add(newText);
         Db.TextRecords.Add(newText);
         Db.SaveChanges();
-
         EraseText();
         selectedTextMenu = 1;
     }
@@ -1724,4 +1592,90 @@
         
         File.WriteAllBytes("wwwroot/" + path + "/image.png", bytes);
     }
+    
+        // =========================
+    // MODE IMAGE => upload + OCR
+    // =========================
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            const long maxSize = 10 * 1024 * 1024; // 10MB
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            var rawBytes = ms.ToArray();
+
+            // Normaliser en PNG (et resize type 1920x1080 comme ton generator)
+            var pngBytes = NormalizeToPng(rawBytes, targetWidth: 1920, targetHeight: 1080);
+
+            uploadedImageBytes = pngBytes;
+            imageBase64 = Convert.ToBase64String(pngBytes);
+
+            await AnalyserImage(pngBytes);
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur upload image : " + ex.Message);
+        }
+    }
+
+    private async Task ReRunOcrOnCurrentImage()
+    {
+        try
+        {
+            if (uploadedImageBytes == null || uploadedImageBytes.Length == 0)
+                return;
+
+            await AnalyserImage(uploadedImageBytes);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur relance OCR : " + ex.Message);
+        }
+    }
+
+    private byte[] NormalizeToPng(byte[] inputBytes, int? targetWidth = null, int? targetHeight = null)
+    {
+        using var input = SKBitmap.Decode(inputBytes);
+        if (input == null)
+            return inputBytes;
+
+        SKBitmap bmpToSave = input;
+
+        if (targetWidth.HasValue && targetHeight.HasValue &&
+            (input.Width != targetWidth.Value || input.Height != targetHeight.Value))
+        {
+            var resized = new SKBitmap(targetWidth.Value, targetHeight.Value);
+            using var canvas = new SKCanvas(resized);
+            canvas.Clear(SKColors.White);
+
+            var scale = Math.Min(
+                targetWidth.Value / (float)input.Width,
+                targetHeight.Value / (float)input.Height
+            );
+
+            var newW = (int)(input.Width * scale);
+            var newH = (int)(input.Height * scale);
+            var x = (targetWidth.Value - newW) / 2;
+            var y = (targetHeight.Value - newH) / 2;
+
+            var dest = new SKRect(x, y, x + newW, y + newH);
+            canvas.DrawBitmap(input, dest);
+
+            bmpToSave = resized;
+        }
+
+        using var img = SKImage.FromBitmap(bmpToSave);
+        using var data = img.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+
 }

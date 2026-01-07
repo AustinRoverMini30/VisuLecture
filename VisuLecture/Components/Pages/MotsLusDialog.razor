@@ -1,0 +1,117 @@
+﻿@using VisuLecture.Components.Pages
+@inject DialogService DialogService
+
+<div class="dialog-container">
+    <div class="dialog-header">
+        <RadzenIcon Icon="checklist" style="margin-right: 10px; font-size: 1.5rem; color: #28a745;" />
+        <h3 class="dialog-title">Liste des mots lus (@Mots.Count mots)</h3>
+    </div>
+    
+    <div class="dialog-content">
+        <RadzenDataGrid Data="@Mots" TItem="ShowData.Resultat" AllowSorting="true" AllowPaging="true" PageSize="15" class="mots-grid">
+            <Columns>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="mot" Title="Mot" Width="200px">
+                    <Template Context="data">
+                        <span class="mot-label">@data.mot</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="nbMot" Title="Nb Points" Width="120px" TextAlign="TextAlign.Center">
+                    <Template Context="data">
+                        <RadzenBadge BadgeStyle="@GetBadgeStyle(data.nbMot)" Text="@data.nbMot.ToString()" />
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="tempsFixation" Title="Temps de fixation (s)" Width="180px" TextAlign="TextAlign.Center">
+                    <Template Context="data">
+                        <span class="temps-value">@data.tempsFixation.ToString("0.000") s</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ShowData.Resultat" Property="ligne" Title="Ligne" Width="100px" TextAlign="TextAlign.Center" />
+            </Columns>
+        </RadzenDataGrid>
+    </div>
+    
+    <div class="dialog-footer">
+        <div class="info-message">
+            <RadzenIcon Icon="info" style="margin-right: 5px; color: #17a2b8;" />
+            <span>Le premier mot du texte cumule régulièrement le plus grand nombre de points, puisque
+                le regard s'y pose en premier lors de la lecture.</span>
+        </div>
+        <RadzenButton Text="Fermer" Click="@(() => DialogService.Close())" ButtonStyle="ButtonStyle.Secondary"/>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<ShowData.Resultat> Mots { get; set; } = new();
+    
+    private BadgeStyle GetBadgeStyle(int nbPoints)
+    {
+        if (nbPoints <= 2) return BadgeStyle.Info;
+        if (nbPoints <= 5) return BadgeStyle.Primary;
+        if (nbPoints <= 10) return BadgeStyle.Warning;
+        return BadgeStyle.Danger;
+    }
+}
+
+<style>
+    .dialog-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 2px solid #e9ecef;
+        background: linear-gradient(135deg, #f0fff0 0%, #e0ffe0 100%);
+    }
+    
+    .dialog-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.3rem;
+        color: #1d0050;
+        margin: 0;
+    }
+    
+    .dialog-content {
+        flex: 1;
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+    
+    .dialog-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e9ecef;
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+    }
+    
+    .mots-grid {
+        width: 100%;
+    }
+    
+    .mot-label {
+        font-weight: 600;
+        color: #28a745;
+        font-size: 1rem;
+    }
+    
+    .temps-value {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #3a0099;
+        font-size: 0.95rem;
+    }
+
+    .info-message {
+        display: flex;
+        align-items: center;
+        font-size: 0.9rem;
+        color: #666;
+        font-style: italic;
+    }
+</style>
+

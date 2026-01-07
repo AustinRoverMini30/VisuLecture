@@ -109,3 +109,45 @@ window.drawWordBox = (x, y, width, height, borderColor) => {
     ctx.strokeRect(scaledX, scaledY, scaledWidth, scaledHeight);
 };
 
+// Dessine des segments avec épaisseur variable selon la distance entre les points
+window.drawThickenedLine = (segments, lineColor) => {
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
+
+    ctx.strokeStyle = lineColor;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Dessiner chaque segment avec son épaisseur spécifique
+    segments.forEach((segment) => {
+        const x1 = segment.x1 * scaleX;
+        const y1 = segment.y1 * scaleY;
+        const x2 = segment.x2 * scaleX;
+        const y2 = segment.y2 * scaleY;
+        
+        ctx.lineWidth = segment.width;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    });
+};
+
+// Dessine un point individuel
+window.drawPoint = (x, y, color, radius) => {
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
+
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(scaledX, scaledY, radius, 0, Math.PI * 2);
+    ctx.fill();
+};
+
