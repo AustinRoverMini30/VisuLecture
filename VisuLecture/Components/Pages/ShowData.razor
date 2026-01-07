@@ -111,6 +111,11 @@
                     </div>
                     
                     <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isSaccadesVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Afficher les saccades" class="control-label magenta-label" />
+                    </div>
+                    
+                    <div class="control-group">
                         <RadzenButton Click="@GoBack" class="btn-back">
                             <RadzenIcon Icon="arrow_back" style="margin-right: 5px;" />
                             Retour
@@ -144,7 +149,7 @@
 @code {
     // ------------------- CLASSES -------------------
     public record MotCsv(string mot, double? x, double? y, double? largeur, double? hauteur, int ligne, string espace, double? confiance);
-    public record PointCsv(double timestamp, double x, double y, double jump);
+    public record PointCsv(double timestamp, double x, double y, double jump, double saccade);
 
     public class Resultat
     {
@@ -162,11 +167,13 @@
     // ------------------- VARIABLES -------------------
     private List<(double x, double y)> points = new();
     private List<(double x, double y)> pointsRaw = new();
+    private List<List<(double x, double y)>> saccadesGroups = new(); // Liste de groupes de saccades
     private bool isAffineVisible = false;
     private bool isRawVisible = false;
     private bool isDensityVisible = false;
     private bool isWordBoxVisible = false;
     private bool isThickenLinesEnabled = false;
+    private bool isSaccadesVisible = false;
     private bool _firstRenderComplete = false;
     [Parameter] public string readingId { get; set; }
     
@@ -228,6 +235,12 @@
                 var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
                 await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
             }
+        }
+        
+        // Dessiner les saccades
+        if (isSaccadesVisible && saccadesGroups != null && saccadesGroups.Count > 0)
+        {
+            await DrawSaccades();
         }
     }
 
@@ -334,6 +347,9 @@
         csv = await File.ReadAllLinesAsync(csvRaw);
 
         pointsRaw.Clear();
+        saccadesGroups.Clear();
+        
+        List<(double x, double y)> currentSaccadeGroup = null;
 
         foreach (var raw in csv.Skip(1)) // skip header
         {
@@ -345,11 +361,36 @@
             if (parts.Length < 3)
                 continue;
 
-            // index,x,y  -> x = parts[1], y = parts[2]
+            // timestamp,x,y,jump,saccade -> x = parts[1], y = parts[2], saccade = parts[4]
             if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
                 double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
             {
                 pointsRaw.Add((x, y));
+                
+                // Vérifier si c'est une saccade (colonne 4, index 4)
+                bool isSaccade = false;
+                if (parts.Length >= 5 && 
+                    double.TryParse(parts[4].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var saccade) &&
+                    saccade > 0)
+                {
+                    isSaccade = true;
+                }
+                
+                if (isSaccade)
+                {
+                    // Si pas de groupe en cours, en créer un nouveau
+                    if (currentSaccadeGroup == null)
+                    {
+                        currentSaccadeGroup = new List<(double x, double y)>();
+                        saccadesGroups.Add(currentSaccadeGroup);
+                    }
+                    currentSaccadeGroup.Add((x, y));
+                }
+                else
+                {
+                    // Fin du groupe de saccades
+                    currentSaccadeGroup = null;
+                }
             }
             else
             {
@@ -504,6 +545,20 @@
             }
             
             await JS.InvokeVoidAsync("drawWordBox", r.x, r.y, r.largeur, r.hauteur, borderColor);
+        }
+    }
+    
+    private async Task DrawSaccades()
+    {
+        // Dessiner chaque groupe de saccades
+        foreach (var group in saccadesGroups)
+        {
+            if (group.Count > 0)
+            {
+                // Convertir les points du groupe pour JavaScript
+                var jsPoints = group.Select(p => new { x = p.x, y = p.y }).ToList();
+                await JS.InvokeVoidAsync("drawSaccadeGroup", jsPoints);
+            }
         }
     }
     
@@ -878,6 +933,10 @@
 
     .orange-label {
         color: #ff9800 !important;
+    }
+
+    .magenta-label {
+        color: #ff00ff !important;
     }
 
     .btn-back {

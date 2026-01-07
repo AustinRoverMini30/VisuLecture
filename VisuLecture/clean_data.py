@@ -11,11 +11,12 @@ import pandas as pd
 POINTS_FILE = "raw.csv"
 
 class Point:
-    def __init__(self, timestamp, x, y, jump=False):
+    def __init__(self, timestamp, x, y, jump=False, saccade=False):
         self.timestamp = timestamp
         self.x = x
         self.y = y
         self.jump = jump
+        self.saccade = saccade
 
 def loadPoints(path=None):
     points = []
@@ -85,6 +86,7 @@ def _recalibrate_points(points, words):
                 x=int(round(x_new)),
                 y=int(round(y_new)),
                 jump=p.jump,
+                saccade=getattr(p, 'saccade', False)
             )
         )
     return corrected
@@ -97,9 +99,9 @@ def cleanData(csvPointsPath=None, csvWordsPath=None):
 def write_points(points, out_path):
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["timestamp", "x", "y", "jump"])
+        writer.writerow(["timestamp", "x", "y", "jump", "saccade"])
         for p in points:
-            writer.writerow([p.timestamp, p.x, p.y, int(p.jump)])
+            writer.writerow([p.timestamp, p.x, p.y, int(p.jump), int(getattr(p, 'saccade', False))])
 
 def main():
     parser = argparse.ArgumentParser()
@@ -142,7 +144,7 @@ def normalize_points_to_lines(points, line_ys):
             ligne += 1
             jump = False
         y = line_ys[min(ligne, len(line_ys)-1)]
-        normalized.append(Point(p.timestamp, p.x, y, p.jump))
+        normalized.append(Point(p.timestamp, p.x, y, p.jump, getattr(p, 'saccade', False)))
 
     return normalized
 
@@ -214,7 +216,7 @@ def detectJumps(points, width, height, average_speed, width_coeff=1, height_coef
 
     if len(points) == 1:
         p = points[0]
-        result.append(Point(p.timestamp, p.x, p.y, False))
+        result.append(Point(p.timestamp, p.x, p.y, False, getattr(p, 'saccade', False)))
         return result, jump_segments
 
     n = len(points) 
@@ -225,7 +227,7 @@ def detectJumps(points, width, height, average_speed, width_coeff=1, height_coef
             points[i], points[i + 1:], None, None, average_speed, height_coef=height_coeff, width_coef=width_coeff
         )
 
-        result.append(Point(points[i].timestamp, points[i].x, points[i].y, False))
+        result.append(Point(points[i].timestamp, points[i].x, points[i].y, False, getattr(points[i], 'saccade', False)))
 
         if not jump:
             i += 1
@@ -254,19 +256,19 @@ def detectJumps(points, width, height, average_speed, width_coeff=1, height_coef
             if j >= n:
                 break
             p = points[j]
-            result.append(Point(p.timestamp, p.x, p.y, False))
+            result.append(Point(p.timestamp, p.x, p.y, False, getattr(p, 'saccade', False)))
 
         for j in range(maxIndex, maxIndex + minSkipped):
             if j >= n:
                 break
             p = points[j]
-            result.append(Point(p.timestamp, p.x, p.y, True))
+            result.append(Point(p.timestamp, p.x, p.y, True, getattr(p, 'saccade', False)))
 
         i = maxIndex + minSkipped
 
     if n > 0:
         last = points[-1]
-        result.append(Point(last.timestamp, last.x, last.y, False))
+        result.append(Point(last.timestamp, last.x, last.y, False, getattr(last, 'saccade', False)))
 
     return result, jump_segments
 
@@ -329,7 +331,10 @@ def getJumps(points, width, height, nbLines, lines, max_iterations=15, fps=30):
 
         if iteration == 0:
             returned_points = points
-    print("Saccades :" , detectSaccades(points))    
+    
+    # Détecter et appliquer les saccades
+    detectSaccades(returned_points)
+    
     return normalize_points_to_lines(returned_points, lines)
 
 def detectSaccades(points):
@@ -352,8 +357,6 @@ def detectSaccades(points):
     for g in groups:
         speeds = compute_speeds(g)            # vitesses
         accels = compute_accelerations(speeds)  # accélérations
-        print("Speed of the group", speeds)
-        print("Accels of the group", accels)
         if max(speeds) > max_speed or max(accels) > max_accel:
             g[0].saccade = True
             g[1].saccade = True
