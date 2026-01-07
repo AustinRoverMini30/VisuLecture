@@ -20,7 +20,7 @@ public class Student
         LastName = "";
         Age = 0;
         Lunette = 1;
-        Theme = 1;
+        Theme = 0; // 0 = thème par défaut (ronds blancs)
         Remarque = "";
     }
 

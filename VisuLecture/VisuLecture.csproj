@@ -41,7 +41,6 @@
     <ItemGroup>
       <None Include="records\**\*.*" CopyToOutputDirectory="PreserveNewest" />
       <None Include="uploads\**\*.*" CopyToOutputDirectory="PreserveNewest" />
-      <None Include="app.db" CopyToOutputDirectory="PreserveNewest" />
       <None Include="beam_eye_tracker_client.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="win64\**\*.*" CopyToOutputDirectory="PreserveNewest" />
       <None Include="*.py" CopyToOutputDirectory="PreserveNewest" />

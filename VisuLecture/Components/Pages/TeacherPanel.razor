@@ -1,6 +1,7 @@
 @page "/teacher-panel"
 @using System.Diagnostics
 @using System.Text
+@using Microsoft.AspNetCore.Components.Forms
 @inject IJSRuntime JS
 @rendermode InteractiveServer
 @using System.Timers;
@@ -9,6 +10,7 @@
 @using Tesseract
 @using VisuLecture.Components.Controller
 @using VisuLecture.Components.Model
+@using Theme = VisuLecture.Components.Model.Theme
 @using Orientation = Radzen.Orientation
 @inject DialogService DialogService
 @inject NavigationManager Navigation
@@ -234,6 +236,20 @@
                 </RadzenSelectBar>
             </div>
 
+            <!-- Boutons Import/Export CSV -->
+            <div class="csv-actions" style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 2rem;">
+                <RadzenButton ButtonStyle="ButtonStyle.Info" 
+                            Click="@ExportStudentsToCSV"
+                            Disabled="@(!Students.Any())"
+                            class="btn-csv">
+                    <RadzenIcon Icon="download" /> Exporter en CSV
+                </RadzenButton>
+                <label class="btn-csv-import-label">
+                    <RadzenIcon Icon="upload_file" /> Importer CSV
+                    <InputFile OnChange="@ImportStudentsFromCSV" accept=".csv" style="display: none;" />
+                </label>
+            </div>
+
             @if (selectedStudentMenu == 2)
             {
                 <div class="new-student-container animate-fade-in">
@@ -294,12 +310,13 @@
                                 <!-- Theme -->
                                 <RadzenFormField Text="Thème préféré">
                                     <ChildContent>
-                                        <RadzenRadioButtonList Name="Theme" @bind-Value=@newStudentModel.Theme TValue="int">
-                                            <Items>
-                                                <RadzenRadioButtonListItem Text="Défaut" Value="1" />
-                                                <RadzenRadioButtonListItem Text="Planète" Value="2" />
-                                            </Items>
-                                        </RadzenRadioButtonList>
+                                        <RadzenDropDown Name="Theme" 
+                                                      @bind-Value=@newStudentModel.Theme 
+                                                      Data=@GetThemeOptions()
+                                                      TextProperty="Text"
+                                                      ValueProperty="Value"
+                                                      TValue="int"
+                                                      class="form-input" />
                                     </ChildContent>
                                     <Helper>
                                         <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire." />
@@ -307,13 +324,10 @@
                                 </RadzenFormField>
                                 
                                 <!-- Remarque -->
-                                <RadzenFormField Text="Remarque">
+                                <RadzenFormField Text="Remarque (optionnel)">
                                     <ChildContent>
-                                        <RadzenTextArea Name="Remarque" @bind-Value=@newStudentModel.Remarque Rows="3" class="form-textarea" />
+                                        <RadzenTextArea Name="Remarque" @bind-Value=@newStudentModel.Remarque Rows="3" class="form-textarea" Placeholder="Ajoutez une remarque (optionnel)..." />
                                     </ChildContent>
-                                    <Helper>
-                                        <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire." />
-                                    </Helper>
                                 </RadzenFormField>
                                 
                                 <!-- Actions -->
@@ -557,6 +571,134 @@
                             <RadzenIcon Icon="description" style="font-size: 4rem; color: #ccc; margin-bottom: 1rem;" />
                             <p class="empty-text">Aucun texte enregistré</p>
                             <p class="empty-subtext">Créez votre premier texte en cliquant sur "Nouveau"</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Themes Section -->
+    <section class="themes-section">
+        <div class="section-container">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <RadzenIcon Icon="palette" style="margin-right: 10px;" />
+                    Gestion des thèmes
+                </h2>
+                <p class="section-description">Créez et gérez les thèmes visuels pour les élèves (5 images PNG par thème)</p>
+            </div>
+            
+            <div class="theme-toggle">
+                <RadzenSelectBar TValue="int" Size="ButtonSize.Medium" @bind-Value="@selectedThemeMenu" class="custom-toggle">
+                    <Items>
+                        <RadzenSelectBarItem Value="1" Text="🎨 Enregistrés" />
+                        <RadzenSelectBarItem Value="2" Text="➕ Nouveau" />
+                    </Items>
+                </RadzenSelectBar>
+            </div>
+
+            @if (selectedThemeMenu == 2)
+            {
+                <div class="new-theme-container animate-fade-in">
+                    <div class="new-theme-card">
+                        <h3 class="card-title">
+                            <RadzenIcon Icon="add_photo_alternate" />
+                            Créer un nouveau thème
+                        </h3>
+
+                        <div class="form-group">
+                            <label class="form-label">Nom du thème</label>
+                            <RadzenTextBox Placeholder="Ex: Animaux, Espace, Nature..."
+                                           @bind-Value="@newThemeName"
+                                           class="form-input" />
+                        </div>
+
+                        <div class="theme-images-upload">
+                            <p class="upload-instructions">
+                                <RadzenIcon Icon="info" style="margin-right: 5px;" />
+                                Importez 5 images PNG pour ce thème (seront numérotées 1.png à 5.png)
+                            </p>
+                            
+                            @for (int i = 0; i < 5; i++)
+                            {
+                                int index = i; // Capture de variable pour le lambda
+                                <div class="image-upload-slot">
+                                    <label class="upload-label">Image @(i + 1)</label>
+                                    <InputFile OnChange="@(e => OnThemeImageSelected(e, index))" 
+                                             accept="image/png" 
+                                             class="file-input" />
+                                    @if (themeImages[i] != null)
+                                    {
+                                        <div class="image-preview-small">
+                                            <img src="@($"data:image/png;base64,{Convert.ToBase64String(themeImages[i])}")" 
+                                                 alt="Aperçu @(i + 1)" />
+                                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="✓" class="upload-badge" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="image-placeholder-small">
+                                            <RadzenIcon Icon="cloud_upload" />
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="form-actions">
+                            <RadzenButton ButtonStyle="ButtonStyle.Danger"
+                                          Click="@EraseTheme"
+                                          class="btn-action">
+                                <RadzenIcon Icon="delete" /> Effacer
+                            </RadzenButton>
+
+                            <RadzenButton ButtonStyle="ButtonStyle.Success"
+                                          Click="@SaveTheme"
+                                          Disabled="@(!CanSaveTheme())"
+                                          class="btn-action">
+                                <RadzenIcon Icon="save" /> Enregistrer
+                            </RadzenButton>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="themes-grid">
+                    @foreach (var theme in Themes)
+                    {
+                        <div class="theme-card">
+                            <div class="theme-card-header">
+                                <h4 class="theme-card-title">@theme.Name</h4>
+                                <span class="theme-id-badge">ID: @theme.Id</span>
+                            </div>
+                            <div class="theme-card-images">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    <div class="theme-image-mini">
+                                        <img src="@($"/pictures/themes/{theme.FolderName}/{i}.png")" 
+                                             alt="@theme.Name @i" 
+                                             onerror="this.src='/pictures/placeholder.png'" />
+                                    </div>
+                                }
+                            </div>
+                            <div class="theme-card-footer">
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger" 
+                                            Click="@(() => DeleteTheme(theme))"
+                                            class="btn-delete-theme">
+                                    <RadzenIcon Icon="delete" /> Supprimer
+                                </RadzenButton>
+                            </div>
+                        </div>
+                    }
+                    
+                    @if (!Themes.Any())
+                    {
+                        <div class="empty-state">
+                            <RadzenIcon Icon="palette" style="font-size: 4rem; color: #ccc; margin-bottom: 1rem;" />
+                            <p class="empty-text">Aucun thème enregistré</p>
+                            <p class="empty-subtext">Créez votre premier thème en cliquant sur "Nouveau"</p>
                         </div>
                     }
                 </div>
@@ -869,6 +1011,44 @@
         display: flex;
         justify-content: center;
         margin-bottom: 2rem;
+    }
+
+    .csv-actions {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .btn-csv {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-csv-import-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .btn-csv-import-label:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-csv-import-label:active {
+        transform: translateY(0);
     }
 
     .new-student-container {
@@ -1192,6 +1372,178 @@
             flex: 1 1 100%;
         }
     }
+
+    /* Themes Section */
+    .themes-section {
+        background: white;
+        padding: 2rem 1rem;
+    }
+
+    .theme-toggle {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+    }
+
+    .new-theme-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .new-theme-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+    }
+
+    .theme-images-upload {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 1.5rem 0;
+    }
+
+    .upload-instructions {
+        display: flex;
+        align-items: center;
+        color: #666;
+        margin-bottom: 1rem;
+        font-size: 0.95rem;
+    }
+
+    .image-upload-slot {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+
+    .upload-label {
+        font-weight: 600;
+        color: #444;
+        min-width: 80px;
+    }
+
+    .file-input {
+        flex: 1;
+    }
+
+    .image-preview-small {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .image-preview-small img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .upload-badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+    }
+
+    .image-placeholder-small {
+        width: 80px;
+        height: 80px;
+        border-radius: 8px;
+        background: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #adb5bd;
+        font-size: 2rem;
+    }
+
+    .themes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .theme-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .theme-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+    }
+
+    .theme-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+
+    .theme-card-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.2rem;
+        color: #333;
+        margin: 0;
+    }
+
+    .theme-id-badge {
+        background: #667eea;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .theme-card-images {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .theme-image-mini {
+        aspect-ratio: 1;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+
+    .theme-image-mini img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .theme-card-footer {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .btn-delete-theme {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 </style>
 
 @code {
@@ -1205,6 +1557,7 @@
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
+    private List<Theme> Themes;
     
     private Timer _timer;
     private string BeamStatus = "Inconnu";
@@ -1215,6 +1568,7 @@
     private bool hasCheckedModules = false;
     private int selectedTextMenu = 1;
     private int selectedStudentMenu = 1;
+    private int selectedThemeMenu = 1;
     private string newTextTitle;
     private string newTextContent;
     private Student newStudentModel = new Student();
@@ -1224,6 +1578,10 @@
     
     private string imageBase64 = "";
     private List<ResultatOCR> resultats = new();
+    
+    // Variables pour les thèmes
+    private string newThemeName = "";
+    private byte[][] themeImages = new byte[5][];
     
     bool ContainsId(string id)
     {
@@ -1398,7 +1756,33 @@ private async Task GenererImage()
 
             } while (iter.Next(PageIteratorLevel.Word));
             
-            Console.WriteLine("OCR terminé et CSV exporté automatiquement !");
+            // En mode IMAGE, remplir automatiquement newTextContent avec le texte détecté
+            if (selectedInputMode == 2 && resultats.Count > 0)
+            {
+                // Reconstruire le texte à partir des résultats OCR
+                var textBuilder = new StringBuilder();
+                int currentLine = 0;
+                
+                foreach (var r in resultats.OrderBy(x => x.Ligne).ThenBy(x => x.X))
+                {
+                    if (r.Ligne > currentLine)
+                    {
+                        textBuilder.AppendLine(); // Nouvelle ligne
+                        currentLine = r.Ligne;
+                    }
+                    else if (textBuilder.Length > 0 && !textBuilder.ToString().EndsWith("\n"))
+                    {
+                        textBuilder.Append(" "); // Espace entre les mots
+                    }
+                    
+                    textBuilder.Append(r.Mot);
+                }
+                
+                newTextContent = textBuilder.ToString().Trim();
+                Console.WriteLine($"Texte reconstruit depuis OCR : {newTextContent.Length} caractères");
+            }
+            
+            Console.WriteLine($"OCR terminé : {resultats.Count} mots détectés");
         }
         catch (Exception ex)
         {
@@ -1452,6 +1836,7 @@ private async Task GenererImage()
 
         Students = new List<Student>(Db.Students.AsEnumerable());
         TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
+        Themes = new List<Theme>(Db.Themes.AsEnumerable());
         bool running = IsProcessRunning("BeamEyeTracker");
         
         // Nettoyage automatique des dossiers orphelins
@@ -2032,6 +2417,241 @@ private async Task GenererImage()
         newStudentModel = new Student();
     }
 
+    private List<dynamic> GetThemeOptions()
+    {
+        var options = new List<dynamic>
+        {
+            new { Text = "Défaut (ronds blancs)", Value = 0 }
+        };
+        
+        // Ajouter les thèmes depuis la base de données
+        foreach (var theme in Themes.OrderBy(t => t.Id))
+        {
+            options.Add(new { Text = theme.Name, Value = theme.Id });
+        }
+        
+        return options;
+    }
+
+    // ==========================================
+    // IMPORT/EXPORT CSV ÉLÈVES
+    // ==========================================
+    
+    private async Task ExportStudentsToCSV()
+    {
+        try
+        {
+            var csv = new StringBuilder();
+            // En-tête CSV
+            csv.AppendLine("Id,Prenom,Nom,Age,Lunette,Theme,Remarque");
+            
+            // Données des élèves
+            foreach (var student in Students)
+            {
+                csv.AppendLine($"{student.Id},{EscapeCSV(student.FirstName)},{EscapeCSV(student.LastName)},{student.Age},{student.Lunette},{student.Theme},{EscapeCSV(student.Remarque)}");
+            }
+            
+            // Créer le fichier et le télécharger
+            string fileName = $"eleves_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            string filePath = Path.Combine(Path.GetTempPath(), fileName);
+            await File.WriteAllTextAsync(filePath, csv.ToString(), Encoding.UTF8);
+            
+            // Télécharger via JavaScript
+            await JS.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(Encoding.UTF8.GetBytes(csv.ToString())));
+            
+            NotificationService.Notify(NotificationSeverity.Success, "Export réussi", 
+                $"{Students.Count} élève(s) exporté(s) dans {fileName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de l'export : {ex.Message}");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur d'export", 
+                $"Impossible d'exporter les élèves : {ex.Message}");
+        }
+    }
+
+    private async Task ImportStudentsFromCSV(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null)
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Attention", "Aucun fichier sélectionné.");
+                return;
+            }
+
+            const long maxSize = 5 * 1024 * 1024; // 5MB
+            
+            // Lire le contenu du fichier
+            using var stream = file.OpenReadStream(maxSize);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            string csvContent = await reader.ReadToEndAsync();
+            
+            var lines = csvContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            if (lines.Length < 2)
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Attention", "Le fichier CSV est vide ou invalide.");
+                return;
+            }
+            
+            int imported = 0;
+            int updated = 0;
+            int errors = 0;
+            
+            // Ignorer l'en-tête (ligne 0)
+            for (int i = 1; i < lines.Length; i++)
+            {
+                try
+                {
+                    var parts = ParseCSVLine(lines[i]);
+                    
+                    if (parts.Length < 7)
+                    {
+                        Console.WriteLine($"Ligne {i + 1} ignorée : nombre de colonnes insuffisant ({parts.Length} colonnes)");
+                        errors++;
+                        continue;
+                    }
+                    
+                    string id = parts[0].Trim();
+                    string firstName = parts[1].Trim();
+                    string lastName = parts[2].Trim();
+                    
+                    if (!int.TryParse(parts[3].Trim(), out int age))
+                    {
+                        Console.WriteLine($"Ligne {i + 1} ignorée : âge invalide '{parts[3]}'");
+                        errors++;
+                        continue;
+                    }
+                    
+                    if (!int.TryParse(parts[4].Trim(), out int lunette))
+                    {
+                        Console.WriteLine($"Ligne {i + 1} ignorée : lunette invalide '{parts[4]}'");
+                        errors++;
+                        continue;
+                    }
+                    
+                    if (!int.TryParse(parts[5].Trim(), out int theme))
+                    {
+                        Console.WriteLine($"Ligne {i + 1} ignorée : thème invalide '{parts[5]}'");
+                        errors++;
+                        continue;
+                    }
+                    
+                    string remarque = parts[6].Trim();
+                    
+                    // Vérifier si l'élève existe déjà (par ID)
+                    var existingStudent = Students.FirstOrDefault(s => s.Id == id);
+                    
+                    if (existingStudent != null)
+                    {
+                        // Mise à jour
+                        existingStudent.FirstName = firstName;
+                        existingStudent.LastName = lastName;
+                        existingStudent.Age = age;
+                        existingStudent.Lunette = lunette;
+                        existingStudent.Theme = theme;
+                        existingStudent.Remarque = remarque;
+                        
+                        Db.Students.Update(existingStudent);
+                        updated++;
+                    }
+                    else
+                    {
+                        // Nouvel élève
+                        var newStudent = new Student(id, firstName, lastName, age, lunette, theme, remarque);
+                        Students.Add(newStudent);
+                        Db.Students.Add(newStudent);
+                        imported++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Erreur ligne {i + 1} : {ex.Message}");
+                    errors++;
+                }
+            }
+            
+            // Sauvegarder dans la base de données
+            await Db.SaveChangesAsync();
+            
+            string message = $"{imported} élève(s) importé(s), {updated} mis à jour";
+            if (errors > 0) message += $", {errors} erreur(s)";
+            
+            NotificationService.Notify(
+                errors > 0 ? NotificationSeverity.Warning : NotificationSeverity.Success, 
+                "Import terminé", 
+                message
+            );
+            
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de l'import : {ex.Message}");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur d'import", 
+                $"Impossible d'importer les élèves : {ex.Message}");
+        }
+    }
+
+    private string EscapeCSV(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        
+        // Si la valeur contient une virgule, un guillemet ou un retour à la ligne, l'entourer de guillemets
+        if (value.Contains(",") || value.Contains("\"") || value.Contains("\n") || value.Contains("\r"))
+        {
+            // Doubler les guillemets
+            value = value.Replace("\"", "\"\"");
+            return $"\"{value}\"";
+        }
+        
+        return value;
+    }
+
+    private string[] ParseCSVLine(string line)
+    {
+        var result = new List<string>();
+        bool inQuotes = false;
+        var currentField = new StringBuilder();
+        
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            
+            if (c == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    // Double guillemet = guillemet échappé
+                    currentField.Append('"');
+                    i++; // Sauter le prochain guillemet
+                }
+                else
+                {
+                    // Basculer l'état des guillemets
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                // Séparateur de champ
+                result.Add(currentField.ToString());
+                currentField.Clear();
+            }
+            else
+            {
+                currentField.Append(c);
+            }
+        }
+        
+        // Ajouter le dernier champ
+        result.Add(currentField.ToString());
+        
+        return result.ToArray();
+    }
+
     private async Task OnStudentSubmit(Student student)
     {
         // Le modèle est déjà validé grâce aux RequiredValidator
@@ -2058,15 +2678,29 @@ private async Task GenererImage()
     {
         var idTemp = Guid.NewGuid().ToString("N");
         
+        Console.WriteLine($"SaveText appelé - Mode: {selectedInputMode}, Titre: '{newTextTitle}', Contenu: {newTextContent?.Length ?? 0} chars, ImageBase64: {imageBase64?.Length ?? 0} chars, Résultats: {resultats?.Count ?? 0} mots");
+        
         if (string.IsNullOrWhiteSpace(newTextTitle))
         {
             newTextTitle = "NC";
         }
         
-        if (string.IsNullOrWhiteSpace(newTextContent) || string.IsNullOrWhiteSpace(imageBase64))
+        if (string.IsNullOrWhiteSpace(newTextContent))
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Erreur", "Le contenu du texte et l'image sont requis");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", "Le contenu du texte est requis");
             return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(imageBase64))
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", "L'image d'aperçu est requise. " + 
+                (selectedInputMode == 1 ? "Cliquez sur 'Générer le texte' pour créer l'image." : "Veuillez uploader une image."));
+            return;
+        }
+        
+        if (resultats == null || resultats.Count == 0)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Attention", "Aucun mot détecté dans l'image. Le texte sera sauvegardé sans données OCR.");
         }
         
         var newText = new TextRecord(newTextContent, "textImg/" + idTemp, newTextTitle, idTemp);
@@ -2075,6 +2709,9 @@ private async Task GenererImage()
         TextRecords.Add(newText);
         Db.TextRecords.Add(newText);
         Db.SaveChanges();
+        
+        NotificationService.Notify(NotificationSeverity.Success, "Succès", $"Le texte '{newTextTitle}' a été enregistré avec succès.");
+        
         EraseText();
         selectedTextMenu = 1;
     }
@@ -2109,14 +2746,19 @@ private async Task GenererImage()
 
             uploadedImageBytes = pngBytes;
             imageBase64 = Convert.ToBase64String(pngBytes);
+            
+            Console.WriteLine($"Image uploadée : {pngBytes.Length} octets, base64 : {imageBase64.Length} caractères");
 
             await AnalyserImage(pngBytes);
+            
+            Console.WriteLine($"Analyse terminée : {resultats.Count} mots détectés");
 
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Console.WriteLine("Erreur upload image : " + ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", $"Erreur lors de l'upload de l'image : {ex.Message}");
         }
     }
 
@@ -2172,5 +2814,156 @@ private async Task GenererImage()
         return data.ToArray();
     }
 
+    // ==========================================
+    // GESTION DES THÈMES
+    // ==========================================
+    
+    private async Task OnThemeImageSelected(InputFileChangeEventArgs e, int index)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            const long maxSize = 5 * 1024 * 1024; // 5MB
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            var bytes = ms.ToArray();
+
+            // Vérifier que c'est bien un PNG
+            if (!file.ContentType.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Format invalide", 
+                    "Veuillez uploader uniquement des fichiers PNG.");
+                return;
+            }
+
+            themeImages[index] = bytes;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur upload image thème {index + 1} : " + ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                $"Erreur lors de l'upload de l'image {index + 1} : {ex.Message}");
+        }
+    }
+
+    private bool CanSaveTheme()
+    {
+        // Vérifier que le nom n'est pas vide et que les 5 images sont uploadées
+        if (string.IsNullOrWhiteSpace(newThemeName)) return false;
+        
+        for (int i = 0; i < 5; i++)
+        {
+            if (themeImages[i] == null) return false;
+        }
+        
+        return true;
+    }
+
+    private async Task SaveTheme()
+    {
+        if (!CanSaveTheme())
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                "Veuillez renseigner le nom du thème et uploader les 5 images PNG.");
+            return;
+        }
+
+        try
+        {
+            // Générer un ID unique basé sur le prochain ID disponible
+            int newId = Themes.Any() ? Themes.Max(t => t.Id) + 1 : 1;
+            
+            // Créer un nom de dossier basé sur le nom du thème (sans espaces)
+            string folderName = newThemeName.Replace(" ", "_").ToLower();
+            folderName = new string(folderName.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
+            
+            // Créer le dossier du thème
+            string themePath = Path.Combine(Env.WebRootPath, "pictures", "themes", folderName);
+            Directory.CreateDirectory(themePath);
+            
+            // Enregistrer les 5 images
+            for (int i = 0; i < 5; i++)
+            {
+                string imagePath = Path.Combine(themePath, $"{i + 1}.png");
+                await File.WriteAllBytesAsync(imagePath, themeImages[i]);
+            }
+            
+            // Créer le thème dans la base de données
+            var newTheme = new Theme(newId, newThemeName, folderName);
+            Themes.Add(newTheme);
+            Db.Themes.Add(newTheme);
+            await Db.SaveChangesAsync();
+            
+            NotificationService.Notify(NotificationSeverity.Success, "Succès", 
+                $"Le thème '{newThemeName}' a été créé avec succès.");
+            
+            // Réinitialiser le formulaire
+            EraseTheme();
+            selectedThemeMenu = 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de la sauvegarde du thème : {ex.Message}");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                $"Impossible de sauvegarder le thème : {ex.Message}");
+        }
+    }
+
+    private void EraseTheme()
+    {
+        newThemeName = "";
+        themeImages = new byte[5][];
+    }
+
+    private async Task DeleteTheme(Theme theme)
+    {
+        var confirm = await DialogService.Confirm(
+            $"Êtes-vous sûr de vouloir supprimer le thème '{theme.Name}' ?",
+            "Confirmer la suppression",
+            new ConfirmOptions { OkButtonText = "Oui", CancelButtonText = "Non" }
+        );
+
+        if (confirm == true)
+        {
+            try
+            {
+                // Supprimer le dossier du thème
+                string themePath = Path.Combine(Env.WebRootPath, "pictures", "themes", theme.FolderName);
+                if (Directory.Exists(themePath))
+                {
+                    Directory.Delete(themePath, true);
+                }
+                
+                // Supprimer de la base de données
+                Themes.Remove(theme);
+                Db.Themes.Remove(theme);
+                await Db.SaveChangesAsync();
+                
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Suppression réussie",
+                    Detail = $"Le thème '{theme.Name}' a été supprimé.",
+                    Duration = 4000
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur lors de la suppression : {ex.Message}");
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Erreur de suppression",
+                    Detail = $"Impossible de supprimer le thème : {ex.Message}",
+                    Duration = 5000
+                });
+            }
+        }
+    }
 
 }
+

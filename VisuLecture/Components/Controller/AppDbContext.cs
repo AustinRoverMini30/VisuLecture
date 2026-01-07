@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Student> Students => Set<Student>();
     public DbSet<TextRecord> TextRecords => Set<TextRecord>();
     public DbSet<Reading> Readings => Set<Reading>();
+    public DbSet<Theme> Themes => Set<Theme>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -170,12 +170,13 @@
                                                 <!-- Theme -->
                                                 <RadzenFormField Text="Thème préféré">
                                                     <ChildContent>
-                                                        <RadzenRadioButtonList Name="Theme" @bind-Value=@model.Theme TValue="int">
-                                                            <Items>
-                                                                <RadzenRadioButtonListItem Text="Défaut" Value="1" />
-                                                                <RadzenRadioButtonListItem Text="Planète" Value="2" />
-                                                            </Items>
-                                                        </RadzenRadioButtonList>
+                                                        <RadzenDropDown Name="Theme" 
+                                                                      @bind-Value=@model.Theme 
+                                                                      Data=@GetThemeOptions()
+                                                                      TextProperty="Text"
+                                                                      ValueProperty="Value"
+                                                                      TValue="int"
+                                                                      class="form-input" />
                                                     </ChildContent>
                                                     <Helper>
                                                         <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire." />
@@ -183,13 +184,10 @@
                                                 </RadzenFormField>
 
                                                 <!-- Remarque -->
-                                                <RadzenFormField Text="Remarque">
+                                                <RadzenFormField Text="Remarque (optionnel)">
                                                     <ChildContent>
-                                                        <RadzenTextArea Name="Remarque" @bind-Value=@model.Remarque Rows="3" class="form-textarea" />
+                                                        <RadzenTextArea Name="Remarque" @bind-Value=@model.Remarque Rows="3" class="form-textarea" Placeholder="Ajoutez une remarque (optionnel)..." />
                                                     </ChildContent>
-                                                    <Helper>
-                                                        <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire." />
-                                                    </Helper>
                                                 </RadzenFormField>
 
                                                 <!-- Submit -->
@@ -1567,14 +1565,29 @@
     }
 
     // Méthodes pour gérer les thèmes
+    private List<dynamic> GetThemeOptions()
+    {
+        var options = new List<dynamic>
+        {
+            new { Text = "Défaut (ronds blancs)", Value = 0 }
+        };
+        
+        // Ajouter les thèmes depuis la base de données
+        var themes = Db.Themes.OrderBy(t => t.Id).ToList();
+        foreach (var theme in themes)
+        {
+            options.Add(new { Text = theme.Name, Value = theme.Id });
+        }
+        
+        return options;
+    }
+
     private string GetThemeName()
     {
-        return model.Theme switch
-        {
-            1 => "défaut",
-            2 => "planets",
-            _ => "défaut"
-        };
+        if (model.Theme == 0) return "défaut";
+        
+        var theme = Db.Themes.FirstOrDefault(t => t.Id == model.Theme);
+        return theme?.FolderName ?? "défaut";
     }
 
     private string GetThemeImagePath()
@@ -1586,20 +1599,11 @@
             return ""; // Ne devrait pas arriver, mais par sécurité
         }
 
-        // Sélectionner une image aléatoire ou en fonction de la position actuelle
-        // Pour simplifier, on utilise la position actuelle pour varier les images
-        int imageIndex = currentPosition % 5; // On suppose qu'il y a 5 images (0-4)
+        // Sélectionner une image en fonction de la position actuelle
+        // Les images sont numérotées de 1 à 5
+        int imageIndex = (currentPosition % 5) + 1; // 1, 2, 3, 4, ou 5
 
-        if (themeName == "planets")
-        {
-            // Les images planet.png, planet1.png, planet2.png, planet3.png, planet4.png
-            if (imageIndex == 0)
-                return $"/pictures/themes/{themeName}/planet.png";
-            else
-                return $"/pictures/themes/{themeName}/planet{imageIndex}.png";
-        }
-
-        return ""; // Fallback
+        return $"/pictures/themes/{themeName}/{imageIndex}.png";
     }
 
 }
