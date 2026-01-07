@@ -301,56 +301,95 @@
                             <RadzenIcon Icon="note_add" />
                             Créer un nouveau texte
                         </h3>
-                        
+
+                        <!-- NOUVEAU: mode Texte / Image -->
+                        <div class="text-toggle" style="margin-bottom: 1rem;">
+                            <RadzenSelectBar TValue="int" Size="ButtonSize.Medium" @bind-Value="@selectedInputMode" class="custom-toggle">
+                                <Items>
+                                    <RadzenSelectBarItem Value="1" Text="✍️ Texte" />
+                                    <RadzenSelectBarItem Value="2" Text="🖼️ Image" />
+                                </Items>
+                            </RadzenSelectBar>
+                        </div>
+
                         <div class="form-group">
-                            <label class="form-label">Nom du texte</label>
-                            <RadzenTextBox Name="TextTitle" Placeholder="Ex: Lecture du jour, Poème..." 
+                            <label class="form-label">Nom</label>
+                            <RadzenTextBox Placeholder="Ex: Lecture du jour, Poème..."
                                            ValueChanged=@(args => OnChangeTextTitle(args))
                                            class="form-input" />
                         </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Contenu du texte</label>
-                            <RadzenTextArea Placeholder="Saisissez votre texte ici..." 
-                                          Rows="12" 
-                                          ValueChanged=@(args => OnChangeTextContent(args))
-                                          class="form-textarea" />
-                        </div>
-                        
+
+                        @if (selectedInputMode == 1)
+                        {
+                            <!-- MODE TEXTE -->
+                            <div class="form-group">
+                                <label class="form-label">Contenu du texte</label>
+                                <RadzenTextArea Placeholder="Saisissez votre texte ici..."
+                                                Rows="12"
+                                                ValueChanged=@(args => OnChangeTextContent(args))
+                                                class="form-textarea" />
+                            </div>
+
+                            @if (string.IsNullOrEmpty(imageBase64))
+                            {
+                                <div class="form-actions">
+                                    <RadzenButton ButtonStyle="ButtonStyle.Success"
+                                                  Click=@GenererImage
+                                                  class="btn-action btn-generate">
+                                        <RadzenIcon Icon="image" /> Générer le texte
+                                    </RadzenButton>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <!-- MODE IMAGE -->
+                            <div class="form-group">
+                                <label class="form-label">Importer une image</label>
+                                <InputFile OnChange="OnImageSelected" accept="image/*" />
+                                <p style="margin-top: .5rem; color:#666; font-size:.9rem;">
+                                    Conseil : texte noir sur fond clair (PNG/JPG).
+                                </p>
+                            </div>
+                        }
+
                         @if (!string.IsNullOrEmpty(imageBase64))
                         {
                             <div class="text-preview">
                                 <h4 class="preview-title">Aperçu</h4>
-                                <RadzenImage Path="@($"data:image/jpeg;base64,{imageBase64}")" 
-                                           AlternateText="Aperçu du texte" 
-                                           class="preview-image" />
+                                <RadzenImage Path="@($"data:image/png;base64,{imageBase64}")"
+                                             AlternateText="Aperçu du texte"
+                                             class="preview-image" />
                             </div>
-                            
+
                             <div class="form-actions">
-                                <RadzenButton ButtonStyle="ButtonStyle.Danger" 
-                                            Click=@EraseText 
-                                            class="btn-action">
+                                <RadzenButton ButtonStyle="ButtonStyle.Danger"
+                                              Click=@EraseText
+                                              class="btn-action">
                                     <RadzenIcon Icon="delete" /> Effacer
                                 </RadzenButton>
-                                <RadzenButton ButtonStyle="ButtonStyle.Secondary" 
-                                            Click=@GenererImage 
-                                            class="btn-action">
-                                    <RadzenIcon Icon="refresh" /> Regénérer
-                                </RadzenButton>
-                                <RadzenButton ButtonStyle="ButtonStyle.Success" 
-                                            Click=@SaveText 
-                                            class="btn-action btn-save">
+
+                                @if (selectedInputMode == 1)
+                                {
+                                    <RadzenButton ButtonStyle="ButtonStyle.Secondary"
+                                                  Click=@GenererImage
+                                                  class="btn-action">
+                                        <RadzenIcon Icon="refresh" /> Regénérer
+                                    </RadzenButton>
+                                }
+                                else
+                                {
+                                    <RadzenButton ButtonStyle="ButtonStyle.Secondary"
+                                                  Click=@ReRunOcrOnCurrentImage
+                                                  class="btn-action">
+                                        <RadzenIcon Icon="refresh" /> Relancer OCR
+                                    </RadzenButton>
+                                }
+
+                                <RadzenButton ButtonStyle="ButtonStyle.Success"
+                                              Click=@SaveText
+                                              class="btn-action btn-save">
                                     <RadzenIcon Icon="check" /> Enregistrer
-                                </RadzenButton>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="form-actions">
-                                <RadzenButton ButtonStyle="ButtonStyle.Success" 
-                                            Click=@GenererImage 
-                                            class="btn-action btn-generate">
-                                    <RadzenIcon Icon="image" /> Générer le texte
                                 </RadzenButton>
                             </div>
                         }
@@ -393,7 +432,6 @@
             }
         </div>
     </section>
-
 </div>
 
 <style>
@@ -898,6 +936,9 @@
     private string newTextTitle;
     private string newTextContent;
     private Student newStudentModel = new Student();
+    
+    private int selectedInputMode = 1;
+    private byte[]? uploadedImageBytes = null;
     
     private string imageBase64 = "";
     private List<ResultatOCR> resultats = new();
@@ -1551,5 +1592,90 @@ private async Task GenererImage()
         
         File.WriteAllBytes("wwwroot/" + path + "/image.png", bytes);
     }
+    
+        // =========================
+    // MODE IMAGE => upload + OCR
+    // =========================
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            const long maxSize = 10 * 1024 * 1024; // 10MB
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            var rawBytes = ms.ToArray();
+
+            // Normaliser en PNG (et resize type 1920x1080 comme ton generator)
+            var pngBytes = NormalizeToPng(rawBytes, targetWidth: 1920, targetHeight: 1080);
+
+            uploadedImageBytes = pngBytes;
+            imageBase64 = Convert.ToBase64String(pngBytes);
+
+            await AnalyserImage(pngBytes);
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur upload image : " + ex.Message);
+        }
+    }
+
+    private async Task ReRunOcrOnCurrentImage()
+    {
+        try
+        {
+            if (uploadedImageBytes == null || uploadedImageBytes.Length == 0)
+                return;
+
+            await AnalyserImage(uploadedImageBytes);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Erreur relance OCR : " + ex.Message);
+        }
+    }
+
+    private byte[] NormalizeToPng(byte[] inputBytes, int? targetWidth = null, int? targetHeight = null)
+    {
+        using var input = SKBitmap.Decode(inputBytes);
+        if (input == null)
+            return inputBytes;
+
+        SKBitmap bmpToSave = input;
+
+        if (targetWidth.HasValue && targetHeight.HasValue &&
+            (input.Width != targetWidth.Value || input.Height != targetHeight.Value))
+        {
+            var resized = new SKBitmap(targetWidth.Value, targetHeight.Value);
+            using var canvas = new SKCanvas(resized);
+            canvas.Clear(SKColors.White);
+
+            var scale = Math.Min(
+                targetWidth.Value / (float)input.Width,
+                targetHeight.Value / (float)input.Height
+            );
+
+            var newW = (int)(input.Width * scale);
+            var newH = (int)(input.Height * scale);
+            var x = (targetWidth.Value - newW) / 2;
+            var y = (targetHeight.Value - newH) / 2;
+
+            var dest = new SKRect(x, y, x + newW, y + newH);
+            canvas.DrawBitmap(input, dest);
+
+            bmpToSave = resized;
+        }
+
+        using var img = SKImage.FromBitmap(bmpToSave);
+        using var data = img.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
 
 }
