@@ -14,7 +14,8 @@
             @{
                 var isCurrentlyProcessing = CalibrationService.clientId == reading.Id;
                 var isInQueue = CalibrationService._queue.Any(item => item.Item1 == reading.Id);
-                var isBlocked = isCurrentlyProcessing || isInQueue;
+                var hasMissingFiles = CheckMissingFiles(reading);
+                var isBlocked = isCurrentlyProcessing || isInQueue || hasMissingFiles;
             }
             <RadzenCard Style="margin-bottom: 1rem;">
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
@@ -39,6 +40,13 @@
                                 <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Base" Value="100" Size="ProgressBarCircularSize.Small" ShowValue="false" Mode="ProgressBarMode.Indeterminate" AriaLabel="Waiting" />
                             </RadzenStack>
                         }
+                        else if (hasMissingFiles)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="Fichiers CSV manquants"></RadzenBadge>
+                                <RadzenIcon Icon="error" Style="color: var(--rz-danger);" />
+                            </RadzenStack>
+                        }
                     </RadzenStack>
                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                         @if (!isBlocked)
@@ -53,6 +61,9 @@
                         else
                         {
                             <RadzenButton Icon="block" ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small" Disabled="true" />
+                            <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" 
+                                          Click="() => DeleteReading(reading)" 
+                                          title="Supprimer l'enregistrement" />
                         }
                     </RadzenStack>
                 </RadzenStack>
@@ -103,6 +114,28 @@
         // Vérifier si ce reading est en cours de traitement
         return CalibrationService.clientId == reading.Id ||
                CalibrationService._queue.Any(item => item.Item1 == reading.Id);
+    }
+    
+    bool CheckMissingFiles(Reading reading)
+    {
+        try
+        {
+            // Vérifier l'existence du fichier raw.csv
+            string rawCsvPath = Path.Combine(Directory.GetCurrentDirectory(), "records", reading.Id, "raw.csv");
+            bool rawExists = File.Exists(rawCsvPath);
+            
+            // Vérifier l'existence du fichier cleaned.csv
+            string cleanedCsvPath = Path.Combine(Directory.GetCurrentDirectory(), "records", reading.Id, "cleaned.csv");
+            bool cleanedExists = File.Exists(cleanedCsvPath);
+            
+            // Retourner true si au moins un fichier est manquant
+            return !rawExists || !cleanedExists;
+        }
+        catch
+        {
+            // En cas d'erreur, considérer que les fichiers sont manquants
+            return true;
+        }
     }
     
     async Task DeleteReading(Reading reading)

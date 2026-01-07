@@ -83,6 +83,137 @@
         </div>
     </section>
 
+    <!-- Python Dependencies Section -->
+    <section class="python-section">
+        <div class="section-container">
+            <div class="status-card">
+                <div class="status-header">
+                    <div class="status-icon">
+                        <img src="/pictures/python.png" alt="Python" style="width: 100%; height: 100%; object-fit: contain;" />
+                    </div>
+                    <div class="status-info">
+                        <h3 class="status-title">Dépendances Python</h3>
+                        <p class="status-description">Installation et mise à jour des modules Python requis</p>
+                    </div>
+                </div>
+                
+                <div class="status-content">
+                    @if (PythonInstallStatus == "Installation en cours...")
+                    {
+                        <div class="status-display loading">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="15px" AlignItems="AlignItems.Center">
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text=@PythonInstallStatus class="custom-badge"></RadzenBadge>
+                                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" AriaLabel="Loading"/>
+                            </RadzenStack>
+                            @if (!string.IsNullOrEmpty(PythonInstallOutput))
+                            {
+                                <div class="install-output">
+                                    <pre>@PythonInstallOutput</pre>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (PythonInstallStatus == "Installation réussie")
+                    {
+                        <div class="status-display running">
+                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text=@PythonInstallStatus class="custom-badge"></RadzenBadge>
+                            <RadzenButton Click="@InstallPythonDependencies" class="btn-start">
+                                <RadzenIcon Icon="refresh" /> Réinstaller
+                            </RadzenButton>
+                        </div>
+                    }
+                    else if (PythonInstallStatus == "Erreur d'installation")
+                    {
+                        <div class="status-display stopped">
+                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text=@PythonInstallStatus class="custom-badge"></RadzenBadge>
+                            <RadzenButton Click="@InstallPythonDependencies" class="btn-start">
+                                <RadzenIcon Icon="play_arrow" /> Réessayer
+                            </RadzenButton>
+                        </div>
+                        @if (!string.IsNullOrEmpty(PythonInstallOutput))
+                        {
+                            <div class="install-output error">
+                                <pre>@PythonInstallOutput</pre>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="status-display stopped">
+                            <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="Prêt" class="custom-badge"></RadzenBadge>
+                            <RadzenButton Click="@InstallPythonDependencies" class="btn-start">
+                                <RadzenIcon Icon="play_arrow" /> Installer / Mettre à jour
+                            </RadzenButton>
+                        </div>
+                    }
+                    
+                    <!-- Module Status Section -->
+                    <div class="module-status-section">
+                        <div class="module-status-header">
+                            <h4 class="module-status-title">
+                                <RadzenIcon Icon="list" style="margin-right: 8px;" />
+                                État des modules
+                            </h4>
+                            <RadzenButton Click="@CheckPythonModules" 
+                                        Size="ButtonSize.Small" 
+                                        ButtonStyle="ButtonStyle.Light"
+                                        Disabled="@isCheckingModules"
+                                        class="btn-check-modules">
+                                @if (isCheckingModules)
+                                {
+                                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.ExtraSmall" />
+                                    <span style="margin-left: 8px;">Vérification...</span>
+                                }
+                                else
+                                {
+                                    <RadzenIcon Icon="refresh" />
+                                    <span style="margin-left: 8px;">Vérifier</span>
+                                }
+                            </RadzenButton>
+                        </div>
+                        
+                        @if (pythonModules.Any())
+                        {
+                            <div class="modules-list">
+                                @foreach (var module in pythonModules)
+                                {
+                                    <div class="module-item @(module.IsInstalled ? "installed" : "not-installed")">
+                                        <div class="module-info">
+                                            <RadzenIcon Icon="@(module.IsInstalled ? "check_circle" : "cancel")" 
+                                                      class="module-status-icon" />
+                                            <span class="module-name">@module.Name</span>
+                                            @if (!string.IsNullOrEmpty(module.Version))
+                                            {
+                                                <span class="module-version">@module.Version</span>
+                                            }
+                                        </div>
+                                        <RadzenBadge BadgeStyle="@(module.IsInstalled ? BadgeStyle.Success : BadgeStyle.Danger)" 
+                                                   Text="@(module.IsInstalled ? "Installé" : "Non installé")" 
+                                                   class="module-badge" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (hasCheckedModules)
+                        {
+                            <div class="no-modules-message">
+                                <RadzenIcon Icon="info" style="font-size: 24px; color: #999; margin-bottom: 8px;" />
+                                <p>Aucun module trouvé dans requirements.txt</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="no-modules-message">
+                                <RadzenIcon Icon="visibility" style="font-size: 24px; color: #999; margin-bottom: 8px;" />
+                                <p>Cliquez sur "Vérifier" pour voir l'état des modules</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Students Section -->
     <section class="students-section">
         <div class="section-container">
@@ -438,7 +569,7 @@
     /* Import Eurostile Font */
     @@font-face {
         font-family: 'Eurostile';
-        src: url('/fonts/EurostileExtendedBlack.ttf') format('truetype');
+        src: url('/fonts/fonnts.com-Eurostile_Black.otf') format('opentype');
     }
 
     .teacher-panel-container {
@@ -488,10 +619,149 @@
     }
 
     /* Status Section */
-    .status-section {
+    .status-section, .python-section {
         padding: 2rem;
         background: white;
         border-bottom: 1px solid #e9ecef;
+    }
+
+    .install-output {
+        width: 100%;
+        margin-top: 1rem;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .install-output.error {
+        background: #fff5f5;
+        border-color: #feb2b2;
+    }
+
+    .install-output pre {
+        margin: 0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        color: #333;
+    }
+
+    .install-output.error pre {
+        color: #c53030;
+    }
+
+    /* Module Status Section */
+    .module-status-section {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 2px solid #e9ecef;
+    }
+
+    .module-status-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .module-status-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.1rem;
+        color: #333;
+        margin: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    .btn-check-modules {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .modules-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .module-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .module-item.installed {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+    }
+
+    .module-item.not-installed {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+    }
+
+    .module-item:hover {
+        transform: translateX(5px);
+    }
+
+    .module-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .module-status-icon {
+        font-size: 20px;
+    }
+
+    .module-item.installed .module-status-icon {
+        color: #16a34a;
+    }
+
+    .module-item.not-installed .module-status-icon {
+        color: #dc2626;
+    }
+
+    .module-name {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #333;
+    }
+
+    .module-version {
+        font-size: 0.85rem;
+        color: #666;
+        background: rgba(0, 0, 0, 0.05);
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .module-badge {
+        font-size: 0.85rem !important;
+        padding: 0.35rem 0.75rem !important;
+    }
+
+    .no-modules-message {
+        text-align: center;
+        padding: 2rem;
+        color: #666;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .no-modules-message p {
+        margin: 0;
+        font-size: 0.95rem;
     }
 
     .section-container {
@@ -925,12 +1195,24 @@
 </style>
 
 @code {
+    // Classe pour représenter un module Python
+    public class PythonModule
+    {
+        public string Name { get; set; } = "";
+        public bool IsInstalled { get; set; }
+        public string Version { get; set; } = "";
+    }
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
     
     private Timer _timer;
     private string BeamStatus = "Inconnu";
+    private string PythonInstallStatus = "";
+    private string PythonInstallOutput = "";
+    private List<PythonModule> pythonModules = new();
+    private bool isCheckingModules = false;
+    private bool hasCheckedModules = false;
     private int selectedTextMenu = 1;
     private int selectedStudentMenu = 1;
     private string newTextTitle;
@@ -1281,6 +1563,219 @@ private async Task GenererImage()
         foreach (var process in  Process.GetProcessesByName("BeamEyeTracker"))
         {
             process.Kill();
+        }
+    }
+
+    private async Task InstallPythonDependencies()
+    {
+        PythonInstallStatus = "Installation en cours...";
+        PythonInstallOutput = "";
+        await InvokeAsync(StateHasChanged);
+        
+        try
+        {
+            // Chemin vers requirements.txt
+            string requirementsPath = Path.Combine(Env.ContentRootPath, "requirements.txt");
+            
+            if (!File.Exists(requirementsPath))
+            {
+                PythonInstallStatus = "Erreur d'installation";
+                PythonInstallOutput = $"Erreur : Le fichier requirements.txt n'a pas été trouvé à l'emplacement :\n{requirementsPath}";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "pip",
+                Arguments = $"install -r \"{requirementsPath}\" --upgrade",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = Env.ContentRootPath
+            };
+
+            var process = new Process { StartInfo = psi };
+            var output = new StringBuilder();
+            var error = new StringBuilder();
+
+            process.OutputDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    output.AppendLine(e.Data);
+                    PythonInstallOutput = output.ToString();
+                    InvokeAsync(StateHasChanged);
+                }
+            };
+
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    error.AppendLine(e.Data);
+                }
+            };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode == 0)
+            {
+                PythonInstallStatus = "Installation réussie";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Installation réussie",
+                    Detail = "Les dépendances Python ont été installées/mises à jour avec succès.",
+                    Duration = 4000
+                });
+                
+                // Vérifier automatiquement l'état des modules après installation
+                await CheckPythonModules();
+            }
+            else
+            {
+                PythonInstallStatus = "Erreur d'installation";
+                PythonInstallOutput = $"=== SORTIE ===\n{output}\n\n=== ERREURS ===\n{error}";
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Erreur d'installation",
+                    Detail = "Une erreur s'est produite lors de l'installation des dépendances Python.",
+                    Duration = 5000
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            PythonInstallStatus = "Erreur d'installation";
+            PythonInstallOutput = $"Exception : {ex.Message}\n\nStack Trace:\n{ex.StackTrace}";
+            Console.WriteLine($"Erreur lors de l'installation Python : {ex.Message}");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Erreur système",
+                Detail = $"Impossible d'exécuter pip : {ex.Message}",
+                Duration = 5000
+            });
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CheckPythonModules()
+    {
+        isCheckingModules = true;
+        pythonModules.Clear();
+        await InvokeAsync(StateHasChanged);
+        
+        try
+        {
+            // Lire le fichier requirements.txt
+            string requirementsPath = Path.Combine(Env.ContentRootPath, "requirements.txt");
+            
+            if (!File.Exists(requirementsPath))
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "Fichier introuvable",
+                    Detail = "Le fichier requirements.txt n'existe pas.",
+                    Duration = 4000
+                });
+                isCheckingModules = false;
+                hasCheckedModules = true;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // Lire les modules depuis requirements.txt
+            var lines = await File.ReadAllLinesAsync(requirementsPath);
+            var moduleNames = lines
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.Trim().StartsWith("#") && line.Trim().ToUpper() != "UNKNOWN")
+                .Select(line => line.Split(new[] { "==", ">=", "<=", "~=", "!=" }, StringSplitOptions.None)[0].Trim())
+                .ToList();
+
+            if (!moduleNames.Any())
+            {
+                isCheckingModules = false;
+                hasCheckedModules = true;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            // Vérifier chaque module avec pip show
+            foreach (var moduleName in moduleNames)
+            {
+                var module = new PythonModule { Name = moduleName };
+                
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "pip",
+                    Arguments = $"show {moduleName}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                try
+                {
+                    var process = Process.Start(psi);
+                    if (process != null)
+                    {
+                        string output = await process.StandardOutput.ReadToEndAsync();
+                        await process.WaitForExitAsync();
+
+                        // Si la commande réussit et retourne des informations, le module est installé
+                        if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                        {
+                            module.IsInstalled = true;
+                            
+                            // Extraire la version
+                            var versionLine = output.Split('\n')
+                                .FirstOrDefault(line => line.StartsWith("Version:", StringComparison.OrdinalIgnoreCase));
+                            if (versionLine != null)
+                            {
+                                module.Version = versionLine.Split(':')[1].Trim();
+                            }
+                        }
+                        else
+                        {
+                            module.IsInstalled = false;
+                        }
+                    }
+                }
+                catch
+                {
+                    module.IsInstalled = false;
+                }
+
+                pythonModules.Add(module);
+                await InvokeAsync(StateHasChanged);
+            }
+
+            hasCheckedModules = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de la vérification des modules : {ex.Message}");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Erreur",
+                Detail = $"Impossible de vérifier les modules : {ex.Message}",
+                Duration = 5000
+            });
+        }
+        finally
+        {
+            isCheckingModules = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 

@@ -25,13 +25,25 @@
             <RadzenIcon Icon="info" style="margin-right: 5px; color: #17a2b8;" />
             <span>Ces mots n'ont reçu aucun point de fixation pendant la lecture.</span>
         </div>
-        <RadzenButton Text="Fermer" Click="@(() => DialogService.Close())" ButtonStyle="ButtonStyle.Secondary" />
+        <RadzenButton Text="Fermer" Click="@CloseDialog" ButtonStyle="ButtonStyle.Secondary" />
     </div>
 </div>
 
 @code {
     [Parameter]
     public List<ShowData.Resultat> Mots { get; set; } = new();
+
+    private void CloseDialog()
+    {
+        try
+        {
+            DialogService.Close();
+        }
+        catch
+        {
+            // Ignorer les erreurs de fermeture
+        }
+    }
 }
 
 <style>

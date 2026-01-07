@@ -4,6 +4,7 @@
         <TargetFramework>net9.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <WebRootPath>wwwroot</WebRootPath>
     </PropertyGroup>
 
     <ItemGroup>
@@ -31,14 +32,28 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Include="wwwroot\js\overlay.js" />
-    </ItemGroup>
-
-    <ItemGroup>
       <_ContentIncludedByDefault Remove="wwwroot\textImg\0Coucou\image.png" />
       <_ContentIncludedByDefault Remove="wwwroot\textImg\0Coucou\resultats_ocr.csv" />
       <_ContentIncludedByDefault Remove="wwwroot\textImg\2Ah\image.png" />
       <_ContentIncludedByDefault Remove="wwwroot\textImg\2Ah\resultats_ocr.csv" />
     </ItemGroup>
+
+    <ItemGroup>
+      <None Include="records\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="uploads\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="app.db" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="beam_eye_tracker_client.dll" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="win64\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="*.py" CopyToOutputDirectory="PreserveNewest" />
+      <None Include="requirements.txt" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <Target Name="CopyWwwrootToOutput" AfterTargets="Build;Publish">
+      <ItemGroup>
+        <WwwrootFiles Include="$(ProjectDir)wwwroot\**\*.*" />
+      </ItemGroup>
+      <Copy SourceFiles="@(WwwrootFiles)" DestinationFolder="$(OutputPath)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
+      <Message Text="Copying wwwroot files to $(OutputPath)wwwroot" Importance="high" />
+    </Target>
 
 </Project>
