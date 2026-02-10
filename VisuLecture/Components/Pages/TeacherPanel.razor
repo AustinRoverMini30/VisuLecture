@@ -1689,15 +1689,124 @@ private async Task GenererImage()
 
     await InvokeAsync(StateHasChanged);
 }
-    private async Task AnalyserImage(byte[] imageBytes)
+private async Task AnalyserImage(byte[] imageBytes)
+{
+    try
     {
-        try
-        {
-            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
-            resultats.Clear();
+        resultats.Clear();
 
-            // Caractères spéciaux à retirer (SANS apostrophes et tirets)
-            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
+        // Caractères spéciaux à retirer (SANS apostrophes et tirets)
+        var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
+
+        if (Environment.OSVersion.Platform == PlatformID.Unix)
+        {
+            // === MODE LINUX : utiliser le CLI tesseract ===
+            string tempImagePath = Path.Combine(Path.GetTempPath(), $"ocr_temp_{Guid.NewGuid()}.png");
+            string tempTsvPath = Path.Combine(Path.GetTempPath(), $"ocr_temp_{Guid.NewGuid()}");
+            
+            try
+            {
+                // Sauvegarder l'image temporairement
+                await File.WriteAllBytesAsync(tempImagePath, imageBytes);
+
+                // Exécuter tesseract en CLI
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "tesseract",
+                    Arguments = $"\"{tempImagePath}\" \"{tempTsvPath}\" -l fra tsv",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = Process.Start(psi);
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode != 0)
+                {
+                    string error = await process.StandardError.ReadToEndAsync();
+                    throw new Exception($"Tesseract a échoué : {error}");
+                }
+
+                // Lire le fichier TSV généré
+                string tsvFile = tempTsvPath + ".tsv";
+                if (!File.Exists(tsvFile))
+                    throw new Exception("Le fichier TSV n'a pas été généré");
+
+                var lines = await File.ReadAllLinesAsync(tsvFile);
+                int lineNum = 0;
+                float prevRight = 0;
+                float espace = 0;
+
+                // Parser le TSV (ignorer la première ligne d'en-tête)
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    var parts = lines[i].Split('\t');
+                    if (parts.Length < 12) continue;
+
+                    // Vérifier si c'est un mot (level = 5)
+                    if (parts[0] != "5") continue;
+
+                    string mot = parts[11].Trim();
+                    if (string.IsNullOrWhiteSpace(mot)) continue;
+
+                    int x = int.Parse(parts[6], System.Globalization.CultureInfo.InvariantCulture);
+                    int y = int.Parse(parts[7], System.Globalization.CultureInfo.InvariantCulture);
+                    int width = int.Parse(parts[8], System.Globalization.CultureInfo.InvariantCulture);
+                    int height = int.Parse(parts[9], System.Globalization.CultureInfo.InvariantCulture);
+                    float conf = float.Parse(parts[10], System.Globalization.CultureInfo.InvariantCulture);
+
+
+                    int blockNum = int.Parse(parts[2]);
+                    if (blockNum != lineNum)
+                    {
+                        lineNum = blockNum;
+                        prevRight = 0;}
+
+                    // Nettoyer le mot
+                    string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
+                    if (string.IsNullOrWhiteSpace(motNettoye)) continue;
+
+                    if (prevRight > 0)
+                    {
+                        espace = x - prevRight;
+                        if (espace < 0) espace = x / 2f;
+                    }
+                    else
+                    {
+                        espace = 0;
+                    }
+
+                    resultats.Add(new ResultatOCR
+                    {
+                        Mot = motNettoye,
+                        X = (int)(x - (espace / 2f)),
+                        Y = y,
+                        Largeur = (int)(width + espace),
+                        Hauteur = height,
+                        Ligne = lineNum,
+                        Espace = (int)espace,
+                        Confiance = (int)conf
+                    });
+
+                    prevRight = x + width;
+                }
+
+                // Nettoyer les fichiers temporaires
+                if (File.Exists(tempImagePath)) File.Delete(tempImagePath);
+                if (File.Exists(tsvFile)) File.Delete(tsvFile);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur CLI Tesseract : {ex.Message}");
+                throw;
+            }
+        }
+        else
+        {
+            // === MODE WINDOWS : utiliser l'API Tesseract ===
+            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
 
             using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
             using var pix = Pix.LoadFromMemory(imageBytes);
@@ -1722,12 +1831,8 @@ private async Task GenererImage()
                     string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
                     float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
 
-                    // Nettoyer le mot en retirant tous les caractères spéciaux
                     string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
-                    
-                    // Ignorer si le mot est vide après nettoyage ou ne contient que des symboles
-                    if (string.IsNullOrWhiteSpace(motNettoye))
-                        continue;
+                    if (string.IsNullOrWhiteSpace(motNettoye)) continue;
 
                     if (prevRight > 0)
                     {
@@ -1753,42 +1858,42 @@ private async Task GenererImage()
 
                     prevRight = rect.X2;
                 }
-
             } while (iter.Next(PageIteratorLevel.Word));
-            
-            // En mode IMAGE, remplir automatiquement newTextContent avec le texte détecté
-            if (selectedInputMode == 2 && resultats.Count > 0)
-            {
-                // Reconstruire le texte à partir des résultats OCR
-                var textBuilder = new StringBuilder();
-                int currentLine = 0;
-                
-                foreach (var r in resultats.OrderBy(x => x.Ligne).ThenBy(x => x.X))
-                {
-                    if (r.Ligne > currentLine)
-                    {
-                        textBuilder.AppendLine(); // Nouvelle ligne
-                        currentLine = r.Ligne;
-                    }
-                    else if (textBuilder.Length > 0 && !textBuilder.ToString().EndsWith("\n"))
-                    {
-                        textBuilder.Append(" "); // Espace entre les mots
-                    }
-                    
-                    textBuilder.Append(r.Mot);
-                }
-                
-                newTextContent = textBuilder.ToString().Trim();
-                Console.WriteLine($"Texte reconstruit depuis OCR : {newTextContent.Length} caractères");
-            }
-            
-            Console.WriteLine($"OCR terminé : {resultats.Count} mots détectés");
         }
-        catch (Exception ex)
+
+        // En mode IMAGE, remplir automatiquement newTextContent avec le texte détecté
+        if (selectedInputMode == 2 && resultats.Count > 0)
         {
-            Console.WriteLine("Erreur OCR : " + ex.Message);
+            var textBuilder = new StringBuilder();
+            int currentLine = 0;
+
+            foreach (var r in resultats.OrderBy(x => x.Ligne).ThenBy(x => x.X))
+            {
+                if (r.Ligne > currentLine)
+                {
+                    textBuilder.Append("\n");
+                    currentLine = r.Ligne;
+                }
+                else if (textBuilder.Length > 0 && !textBuilder.ToString().EndsWith("\n"))
+                {
+                    textBuilder.Append(" ");
+                }
+
+                textBuilder.Append(r.Mot);
+            }
+
+            newTextContent = textBuilder.ToString().Trim();
+            Console.WriteLine($"Texte reconstruit depuis OCR : {newTextContent.Length} caractères");
         }
+
+        Console.WriteLine($"OCR terminé : {resultats.Count} mots détectés");
     }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Erreur OCR : " + ex.Message);
+        Console.WriteLine(ex.StackTrace);
+    }
+}
 
     private async Task ExporterCSV(string path)
     {

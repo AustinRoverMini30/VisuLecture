@@ -7,9 +7,6 @@ import cv2
 import numpy as np
 import pandas as pd
 
-
-POINTS_FILE = "raw.csv"
-
 class Point:
     def __init__(self, timestamp, x, y, jump=False, saccade=False):
         self.timestamp = timestamp
@@ -20,7 +17,7 @@ class Point:
 
 def loadPoints(path=None):
     points = []
-    with open(f"{path}/{POINTS_FILE}", "r") as f:
+    with open(f"{path}", "r") as f:
         reader = csv.reader(f)
         next(reader)
         for row in reader:
@@ -149,9 +146,9 @@ def normalize_points_to_lines(points, line_ys):
     return normalized
 
 def isJumpNew(
-    currentPoint, nextPoints, coeffCalibration, nbLines,
-    averageReadingSpeed, height_coef, width_coef,
-    fps=30, width=1920, height=1080
+        currentPoint, nextPoints, coeffCalibration, nbLines,
+        averageReadingSpeed, height_coef, width_coef,
+        fps=30, width=1920, height=1080
 ):
     if len(nextPoints) > 1 and average_speed([currentPoint, nextPoints[1]]) < 1000:
         return False, 0
@@ -194,8 +191,8 @@ def isJumpNew(
             continue
 
         if (
-            last_point.x + int(500 * authorized_interval_coeff * width_coef) < first_point.x and
-            last_point.y > first_point.y + int(65 * authorized_interval_coeff * height_coef)
+                last_point.x + int(500 * authorized_interval_coeff * width_coef) < first_point.x and
+                last_point.y > first_point.y + int(65 * authorized_interval_coeff * height_coef)
         ):
             speeds = compute_speeds(interval_points)
             accels = compute_accelerations(speeds)
@@ -205,10 +202,10 @@ def isJumpNew(
     return False, 0
 
 def compute_speeds(pts):
-        return [((pts[i].x - pts[i - 1].x)**2 + (pts[i].y - pts[i - 1].y)**2)**0.5 for i in range(1, len(pts))]
+    return [((pts[i].x - pts[i - 1].x)**2 + (pts[i].y - pts[i - 1].y)**2)**0.5 for i in range(1, len(pts))]
 
 def compute_accelerations(sp):
-        return [sp[i] - sp[i - 1] for i in range(1, len(sp))]
+    return [sp[i] - sp[i - 1] for i in range(1, len(sp))]
 
 def detectJumps(points, width, height, average_speed, width_coeff=1, height_coeff=1):
     result = []
@@ -219,7 +216,7 @@ def detectJumps(points, width, height, average_speed, width_coeff=1, height_coef
         result.append(Point(p.timestamp, p.x, p.y, False, getattr(p, 'saccade', False)))
         return result, jump_segments
 
-    n = len(points) 
+    n = len(points)
     i = 0
 
     while i < n - 1:
@@ -331,10 +328,10 @@ def getJumps(points, width, height, nbLines, lines, max_iterations=15, fps=30):
 
         if iteration == 0:
             returned_points = points
-    
+
     # Détecter et appliquer les saccades
     detectSaccades(returned_points)
-    
+
     return normalize_points_to_lines(returned_points, lines)
 
 def detectSaccades(points):

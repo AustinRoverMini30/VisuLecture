@@ -1,223 +1,174 @@
-import datetime
-import subprocess
-import os
-import psutil
-import pyautogui
-from pywinauto.application import Application
-from pywinauto import Desktop
-import sys, time, cv2, pyvirtualcam
-import threading
+"""
+Demo de calibration sans interface graphique.
+Utilise un flux vidéo (webcam ou webcam virtuelle) pour calibrer le modèle.
+"""
+import argparse
+import time
+from pathlib import Path
 
-# --- CLI ---
-if len(sys.argv) < 2:
-    print("Usage: vcam_worker.py <video_path> [fps]")
-    sys.exit(1)
+import cv2
+import numpy as np
 
-video_path = sys.argv[1]
-target_fps = float(sys.argv[2]) if len(sys.argv) > 2 else 30.0
+from eyetrax.calibration.common import compute_grid_points
+from eyetrax.gaze import GazeEstimator
+from eyetrax.utils.screen import get_screen_size
 
-# --- CACHE VIDEO CONFIG (constante) ---
-CACHE_VIDEO_NAME = "reading.webm"
-CACHE_VIDEO_PATH = os.path.join(video_path, CACHE_VIDEO_NAME)
-
-# Variable de contrôle (demandée)
-stop_cache_video = False
-
-def play_cache_video(video_path: str, target_fps: float, cam):
-    """Joue une vidéo 'cache' en boucle tant que stop_cache_video est False."""
-    global stop_cache_video
-
-    while not stop_cache_video:
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print(f"Cannot open cache video: {video_path}")
-            return
-
-        try:
-            while not stop_cache_video:
-                ok, frame = cap.read()
-                if not ok:
-                    break  # on repart du début de la vidéo cache
-
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                cam.send(rgb)
-                cam.sleep_until_next_frame()
-        finally:
-            cap.release()
-
-def play_video(video_path: str, target_fps: float = 30.0, point=(50,50,50), cam=None):
-    """Lit le fichier vidéo et l'envoie à la caméra virtuelle.
-    Déclenche video_done quand la lecture est terminée.
+def     run_headless_calibration(
+        gaze_estimator,
+        calibration_points: str = "9p",
+        capture_duration: float = 2.0,
+        screen_size: tuple = None,
+        video_paths: list = None,
+):
     """
+    Effectue une calibration sans interface graphique.
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open {video_path}")
-
-    ok, frame = cap.read()
-    if not ok:
-        cap.release()
-        raise RuntimeError("Empty video")
-
-    h, w = frame.shape[:2]
-    try:
-        # Repars du début
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-
-        print("début", datetime.datetime.now())
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                pyautogui.moveTo(point[1], point[2], duration=0)
-                pyautogui.click()
-                time.sleep(1)
-                break  # fin de vidéo
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            cam.send(rgb)
-            cam.sleep_until_next_frame()# cadence régulière
-        print("Video playback done.", datetime.datetime.now())
-
-        time.sleep(1)
-    finally:
-        cap.release()
-
-def initCam(video_path: str, target_fps: float = 30.0, point=(50,50,50), cam=None):
-    """Lit le fichier vidéo et l'envoie à la caméra virtuelle.
-    Déclenche video_done quand la lecture est terminée.
+    Args:
+        gaze_estimator: Instance de GazeEstimator
+        calibration_points: Type de calibration ("9p", "5p", "center")
+        capture_duration: Durée de capture par point (secondes)
+        screen_size: Tuple (width, height) de la résolution d'écran
+        video_paths: Liste des chemins vers les vidéos de calibration
     """
+    sw, sh = get_screen_size() if screen_size is None else screen_size
 
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open {video_path}")
+    # Définir les points de calibration
+    if calibration_points == "9p":
+        order = [
+            (1, 1), (0, 0), (2, 0), (0, 2), (2, 2),
+            (1, 0), (0, 1), (2, 1), (1, 2),
+        ]
+    elif calibration_points == "5p":
+        order = [(1, 1), (0, 0), (2, 0), (2, 2), (0, 2)]
+    elif calibration_points == "center":
+        order = [(1, 1)]  # Point central uniquement
+    else:
+        raise ValueError(f"Type de calibration inconnu: {calibration_points}")
 
-    ok, frame = cap.read()
-    if not ok:
-        cap.release()
-        raise RuntimeError("Empty video")
+    pts = compute_grid_points(order, sw, sh)
 
-    h, w = frame.shape[:2]
-    try:
-        # Repars du début
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    res = analyze_from_videos(gaze_estimator, video_paths, pts)
+    if res is None:
+        return
+    feats, targs = res
+    if feats:
+        gaze_estimator.train(np.array(feats), np.array(targs))
 
-        print("début", datetime.datetime.now())
+    return True
 
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                time.sleep(1)
 
-                # Récupérer le panneau latéral principal
-                panel = Desktop(backend="uia").window(title_re=".*BeamEye.*", found_index=0)
-                panel.wait("visible enabled ready", timeout=60)
-
-                # Cliquer sur le bouton "Calibrer"
-                btn = panel.child_window(
-                    auto_id="QApplication.SenseTrayMenu.TrayMenuMainFrame.QStackedWidget.QFrame.TrayMenuExtensionsAPIRowBoxWidget.AnimatedToggle",
-                    control_type="CheckBox"
-                )
-
-                btn.wait("visible enabled ready", timeout=10)
-
-                # On active seulement si c’est décoché
-                state = btn.get_toggle_state()   # 0 = off, 1 = on
-
-                if state == 0:
-                    btn.click_input()
-
-                # Cliquer sur le bouton "Calibrer"
-                btn = panel.child_window(title="Calibrer", control_type="Button")
-                btn.wait("visible enabled ready", timeout=10)
-                btn.click_input()
-
-                panel = Desktop(backend="uia").window(title_re=".*Calibration.*")
-                panel.wait("visible enabled ready", timeout=15)
-                break  # fin de vidéo
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            cam.send(rgb)
-            cam.sleep_until_next_frame()# cadence régulière
-        print("Video playback done.", datetime.datetime.now())
-
-        time.sleep(1)
-    finally:
-        #cap.release()
-        pass
-
-def click(camera):
-    screen_width, screen_height = pyautogui.size()
-
-    points = [
-        (0, screen_width // 2, screen_height // 2),
-        (1, 50, 50),
-        (2, screen_width - 50, 50),
-        (3, screen_width - 50, screen_height - 50),
-        (4, 50, screen_height - 50),
-    ]
-
-    for point in points:
-        play_video(video_path + "video" + str(point[0]) + ".webm", target_fps, point, cam)
-
-        #pyautogui.moveTo(point[1], point[2], duration=0)
-        #pyautogui.click()
-
-def openBeamEye():
-    # Chemin de BeamEye.exe
-    path = r"C:\Program Files\Eyeware\BeamEyeTracker\BeamEyeTracker.exe"
-    folder = os.path.dirname(path)
-
-    subprocess.Popen(
-        [path],
-        cwd=folder,
-        creationflags=0x08000000  # CREATE_NO_WINDOW
+def maint():
+    parser = argparse.ArgumentParser(
+        description="Calibration headless pour EyeTrax via webcam virtuelle"
+    )
+    parser.add_argument(
+        "--video-prefix",
+        type=str,
+        help="Préfixe du chemin des vidéos (ex: 'uploads/bidule/video' pour video0.webm, video1.webm, ...)"
+    )
+    parser.add_argument(
+        "--calibration",
+        choices=["9p", "5p", "center"],
+        default="9p",
+        help="Type de calibration: 9 points, 5 points, ou centre uniquement"
+    )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=2.0,
+        help="Durée de capture par point (secondes)"
+    )
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=1920,
+        help="Largeur de l'écran"
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=1080,
+        help="Hauteur de l'écran"
     )
 
-    app = Application(backend="uia").connect(path=path)
+    args = parser.parse_args()
 
-def closeBeamEye():
-    for proc in psutil.process_iter(['pid', 'name']):
-        if proc.info['name'] == 'BeamEyeTracker.exe':
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except psutil.TimeoutExpired:
-                proc.kill()
+    # Construire la liste des chemins vidéo
+    num_videos = 9 if args.calibration == "9p" else (5 if args.calibration == "5p" else 1)
+    video_paths = [f"{args.video_prefix}{i}.webm" for i in range(num_videos)]
 
-tryCalib = True
-cam = None
+    print(f"Chemins des vidéos générés:")
+    for i, path in enumerate(video_paths):
+        print(f"  Video {i}: {path}")
 
-while (tryCalib):
-    try:
-        openBeamEye()
+    gaze_estimator = GazeEstimator()
 
-        cap = cv2.VideoCapture(video_path + "video0.webm")
-        _, firstFrame = cap.read()
-        h, w = firstFrame.shape[:2]
+    screen_size = (args.width, args.height)
 
-        cam = pyvirtualcam.Camera(width=w, height=h, fps=target_fps, print_fps=False, device="Unity Video Capture")
+    success = run_headless_calibration(
+        gaze_estimator,
+        calibration_points=args.calibration,
+        capture_duration=args.duration,
+        video_paths=video_paths,
+        screen_size=screen_size
+    )
 
-        # --- Démarrage vidéo cache tant que click() n'a pas commencé ---
-        stop_cache_video = False
-        cache_thread = threading.Thread(
-            target=play_cache_video,
-            args=(CACHE_VIDEO_PATH, target_fps, cam),
-            daemon=True
-        )
-        cache_thread.start()
+    if success:
+        output_file = f"gaze_model.pkl"
+        gaze_estimator.save_model(output_file)
+        print(f"Modèle sauvegardé: {output_file}")
+    else:
+        print("Calibration échouée. Aucun modèle sauvegardé.")
 
-        initCam(video_path + "video0.webm", target_fps, cam=cam)
+def analyze_from_videos(
+        gaze_estimator,
+        video_paths: list,
+        pts,
+        skip_frames: int = 30,
+):
+    """
+    Analyze gaze from 5 videos (one per calibration point) without GUI.
 
-        # --- Stop cache juste avant click() ---
-        stop_cache_video = True
-        time.sleep(0.2)  # laisse le thread sortir proprement
+    Args:
+        gaze_estimator: The gaze estimator object
+        video_paths: List of 5 video file paths
+        pts: List of 5 calibration points [(x, y), ...]
+        skip_frames: Number of initial frames to ignore per video
 
-        click(cam)
+    Returns:
+        Tuple of (features, targets) or None if error
+    """
+    if len(video_paths) != len(pts):
+        raise ValueError(f"Number of videos ({len(video_paths)}) must match number of points ({len(pts)})")
 
-        cam.close()
+    feats, targs = [], []
 
-        tryCalib = False
-    except Exception as e:
-        print("Erreur durant la calibration :", e)
-        closeBeamEye()
-        stop_cache_video = True
-        if cam is not None:
-            cam.close()
+    for video_path, (x, y) in zip(video_paths, pts):
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Error: Could not open video {video_path}")
+            cap.release()
+            return None
+
+        # Skip initial frames
+        for _ in range(skip_frames):
+            cap.read()
+
+        # Process remaining frames
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+
+            ft, blink = gaze_estimator.extract_features(frame)
+            if ft is not None and not blink:
+                feats.append(ft)
+                targs.append([x, y])
+
+        cap.release()
+
+    return feats, targs
+
+
+if __name__ == "__main__":
+    maint()
