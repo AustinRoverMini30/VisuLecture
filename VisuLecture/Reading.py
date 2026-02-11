@@ -1,19 +1,56 @@
 import datetime
 import os
 import sys, cv2, pyvirtualcam
+import argparse
+import numpy as np
 
 from eyetrax import GazeEstimator, run_9_point_calibration
 import csv
 
-# --- CLI ---
-if len(sys.argv) < 2:
-    print("Usage: vcam_worker.py <video_path> [fps]")
-    sys.exit(1)
+from eyetrax.filters import KDESmoother, NoSmoother
 
-video_path = sys.argv[1]
-csv_path = sys.argv[2]
 list_points = []
 
+parser = argparse.ArgumentParser(
+    description="Lecture pour EyeTrax via webcam virtuelle"
+)
+
+parser.add_argument(
+    "--video",
+    type=str
+)
+
+parser.add_argument(
+    "--csv",
+    type=str
+)
+
+parser.add_argument(
+    "--filter",
+    type=str
+)
+
+parser.add_argument(
+    "--model",
+    type=str
+)
+
+parser.add_argument(
+    "--width",
+    type=str
+)
+
+parser.add_argument(
+    "--height",
+    type=str
+)
+
+args = parser.parse_args()
+
+video_path = args.video
+csv_path = args.csv
+filter = args.filter
+screen_width, screen_height = args.width, args.height
 
 def record_to_csv(data: list, csv_path: str):
     dir_path = os.path.dirname(csv_path)
@@ -28,7 +65,11 @@ def record_to_csv(data: list, csv_path: str):
 
 def record_gaze(video_path: str):
     # Load model
-    estimator = GazeEstimator()
+
+    if args.model is not None:
+        estimator = GazeEstimator(model_name=args.model)
+    else:
+        estimator = GazeEstimator()
     estimator.load_model("gaze_model.pkl")
 
     cap = cv2.VideoCapture(video_path)
@@ -47,8 +88,17 @@ def record_gaze(video_path: str):
 
         # Predict screen coordinates
         if features is not None and not blink:
-            x, y = estimator.predict([features])[0]
-            list_points.append((datetime.datetime.now().timestamp(), round(x), round(y)))
+            gaze_point = estimator.predict(np.array([features]))[0]
+            x, y = map(int, gaze_point)
+
+            if filter == "kde":
+                smoother = KDESmoother(screen_width, screen_height)
+            else:
+                smoother = NoSmoother()
+
+            x_pred, y_pred = smoother.step(x, y)
+            print(f"Gaze: ({x_pred}, {y_pred})")
+            list_points.append((datetime.datetime.now().timestamp(), round(x_pred), round(y_pred)))
 
     cap.release()
 

@@ -51,6 +51,9 @@
                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                         @if (!isBlocked)
                         {
+                            <RadzenButton Icon="restart_alt" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
+                                          Click="() => ReanalyzeData(reading)" 
+                                          title="Analyser" />
                             <RadzenButton Icon="visibility" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" 
                                           Click="() => SelectReading(reading)" 
                                           title="Consulter l'enregistrement" />
@@ -191,6 +194,13 @@
     void SelectReading(Reading reading)
     {
         DialogService.Close(reading.Id);
+    }
+    
+    private async Task ReanalyzeData(Reading reading)
+    {
+        await InvokeAsync(StateHasChanged);
+        
+        CalibrationService.EnqueueReanalysis(reading.Id, reading.TextRecord.FilePath);
     }
 }
 

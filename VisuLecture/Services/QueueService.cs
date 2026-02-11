@@ -55,6 +55,23 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"Task queued for clientId: {clientId}");
         Console.WriteLine($"Task queued for clientId: {clientId}, signal released");
     }
+    
+    /// <summary>
+    /// Réanalyse les données d'une lecture existante
+    /// </summary>
+    public void EnqueueReanalysis(string clientId, string textRecordFilePath)
+    {
+        _logger.LogInformation($"EnqueueReanalysis called for clientId: {clientId}");
+        Console.WriteLine($"EnqueueReanalysis called for clientId: {clientId}");
+        
+        // Pour la réanalyse, on ajoute directement à la queue sans vérifier _waitingCalibrations
+        // car les vidéos existent déjà
+        _queue.Enqueue((clientId, textRecordFilePath));
+        _signal.Release(); // Réveille le consommateur
+        
+        _logger.LogInformation($"Reanalysis task queued for clientId: {clientId}");
+        Console.WriteLine($"Reanalysis task queued for clientId: {clientId}, signal released");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -154,7 +171,7 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"Starting Reading.py for {clientId}");
         
         string videoPath = $@"uploads/{clientId}/reading.webm";
-        await Process.Start(pythonExe, $"\"{readScriptPath}\" \"{videoPath}\" \"{pointsCsv}\"").WaitForExitAsync();
+        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width 1920 --height 1080").WaitForExitAsync();
         
         Console.WriteLine($"Reading.py terminé pour {clientId}");
         _logger.LogInformation($"Reading.py finished for {clientId}");

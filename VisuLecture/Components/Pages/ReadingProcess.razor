@@ -1108,16 +1108,27 @@
             screenW = size.width;
             screenH = size.height;
 
-            // Définir les 9 positions selon le schéma spécifié
-            positions.Add((960, 540));   // Point 1: Centre
-            positions.Add((192, 108));   // Point 2: Coin supérieur gauche
-            positions.Add((192, 972));   // Point 3: Coin inférieur gauche
-            positions.Add((1728, 108));  // Point 4: Coin supérieur droit
-            positions.Add((1728, 972));  // Point 5: Coin inférieur droit
-            positions.Add((192, 540));   // Point 6: Milieu gauche
-            positions.Add((960, 108));   // Point 7: Milieu haut
-            positions.Add((960, 972));   // Point 8: Milieu bas
-            positions.Add((1728, 540));  // Point 9: Milieu droit
+            // Calculer les positions en fonction de la taille de l'écran
+            // Marges : 10% de chaque côté en largeur et en hauteur
+            int marginX = (int)(screenW * 0.1);
+            int marginY = (int)(screenH * 0.1);
+            int centerX = screenW / 2;
+            int centerY = screenH / 2;
+            int leftX = marginX;
+            int rightX = screenW - marginX;
+            int topY = marginY;
+            int bottomY = screenH - marginY;
+
+            // Définir les 9 positions selon le schéma spécifié (adapté à la taille de l'écran)
+            positions.Add((centerX, centerY));   // Point 1: Centre
+            positions.Add((leftX, topY));        // Point 2: Coin supérieur gauche
+            positions.Add((leftX, bottomY));     // Point 3: Coin inférieur gauche
+            positions.Add((rightX, topY));       // Point 4: Coin supérieur droit
+            positions.Add((rightX, bottomY));    // Point 5: Coin inférieur droit
+            positions.Add((leftX, centerY));     // Point 6: Milieu gauche
+            positions.Add((centerX, topY));      // Point 7: Milieu haut
+            positions.Add((centerX, bottomY));   // Point 8: Milieu bas
+            positions.Add((rightX, centerY));    // Point 9: Milieu droit
 
             // Calculer la circonférence du cercle de progression
             double radius = (dotW + 30) / 2.0;
