@@ -66,9 +66,11 @@ def record_to_csv(data: list, csv_path: str):
 def record_gaze(video_path: str):
     # Load model
 
-    if args.model is not None:
+    if args.model != "none":
+        print("Modèle spécifié:", args.model)
         estimator = GazeEstimator(model_name=args.model)
     else:
+        print("Aucun modèle spécifié, utilisation du modèle par défaut.")
         estimator = GazeEstimator()
     estimator.load_model("gaze_model.pkl")
 

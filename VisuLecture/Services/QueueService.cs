@@ -10,6 +10,7 @@ using VisuLecture.Components;
 public class CalibrationService : BackgroundService
 {
     private readonly ILogger<CalibrationService> _logger;
+    private const string ConfigFilePath = "calibration_config.txt";
     
     public string clientId = "";
     
@@ -20,10 +21,15 @@ public class CalibrationService : BackgroundService
     private CancellationTokenSource cts;
     private List<PointGaze> gazePoints = new();
     
+    public string calibrationModel = "none";
+    
     public CalibrationService(ILogger<CalibrationService> logger)
     {
         _logger = logger;
         _logger.LogInformation("CalibrationService constructor called");
+        
+        // Charger le modèle de calibration depuis le fichier
+        LoadCalibrationModel();
     }
     public bool IsClientWaiting(string clientId)
     {
@@ -130,12 +136,14 @@ public class CalibrationService : BackgroundService
         Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
         _logger.LogInformation($"Starting Calibrate.py for {clientId}");
         
+        Console.WriteLine($"Modèle de calibration utilisé : {calibrationModel}");
+        
         var calibProcess = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width 1920 --height 1080",
+                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width 1920 --height 1080 --model {calibrationModel}",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
@@ -171,7 +179,7 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"Starting Reading.py for {clientId}");
         
         string videoPath = $@"uploads/{clientId}/reading.webm";
-        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width 1920 --height 1080").WaitForExitAsync();
+        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width 1920 --height 1080 --model {calibrationModel}").WaitForExitAsync();
         
         Console.WriteLine($"Reading.py terminé pour {clientId}");
         _logger.LogInformation($"Reading.py finished for {clientId}");
@@ -245,6 +253,64 @@ public class CalibrationService : BackgroundService
                 }
             }
             api.WaitForNewTrackingData(ref timestamp, 1000);
+        }
+    }
+    
+    /// <summary>
+    /// Sauvegarde le modèle de calibration dans un fichier texte
+    /// </summary>
+    public void SaveCalibrationModel()
+    {
+        try
+        {
+            File.WriteAllText(ConfigFilePath, calibrationModel);
+            _logger.LogInformation($"Modèle de calibration sauvegardé : {calibrationModel}");
+            Console.WriteLine($"Modèle de calibration sauvegardé dans {ConfigFilePath} : {calibrationModel}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de la sauvegarde du modèle de calibration");
+            Console.WriteLine($"Erreur lors de la sauvegarde du modèle de calibration : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Charge le modèle de calibration depuis un fichier texte
+    /// </summary>
+    private void LoadCalibrationModel()
+    {
+        try
+        {
+            if (File.Exists(ConfigFilePath))
+            {
+                string loadedModel = File.ReadAllText(ConfigFilePath).Trim();
+                
+                // Valider que le modèle chargé est valide
+                var validModels = new[] { "none", "elastic_net", "linear_svr", "ridge", "svr", "tiny_mlp" };
+                if (validModels.Contains(loadedModel))
+                {
+                    calibrationModel = loadedModel;
+                    _logger.LogInformation($"Modèle de calibration chargé : {calibrationModel}");
+                    Console.WriteLine($"Modèle de calibration chargé depuis {ConfigFilePath} : {calibrationModel}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Modèle invalide dans le fichier : {loadedModel}. Utilisation du modèle par défaut 'none'.");
+                    Console.WriteLine($"Modèle invalide dans le fichier : {loadedModel}. Utilisation du modèle par défaut 'none'.");
+                    calibrationModel = "none";
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Fichier de configuration non trouvé. Utilisation du modèle par défaut : {calibrationModel}");
+                Console.WriteLine($"Fichier de configuration non trouvé. Utilisation du modèle par défaut : {calibrationModel}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors du chargement du modèle de calibration");
+            Console.WriteLine($"Erreur lors du chargement du modèle de calibration : {ex.Message}");
+            calibrationModel = "none"; // Valeur par défaut en cas d'erreur
         }
     }
 

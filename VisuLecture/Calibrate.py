@@ -91,6 +91,12 @@ def maint():
         help="Hauteur de l'écran"
     )
 
+    parser.add_argument(
+        "--model",
+        type=str,
+        help="['elastic_net', 'linear_svr', 'ridge', 'svr', 'tiny_mlp']"
+    )
+
     args = parser.parse_args()
 
     # Construire la liste des chemins vidéo
@@ -101,7 +107,12 @@ def maint():
     for i, path in enumerate(video_paths):
         print(f"  Video {i}: {path}")
 
-    gaze_estimator = GazeEstimator()
+    if (args.model == "none"):
+        print("Aucun modèle spécifié, utilisation du modèle par défaut.")
+        gaze_estimator = GazeEstimator()
+    else:
+        print("Modèle spécifié:", args.model)
+        gaze_estimator = GazeEstimator(model_name=args.model)
 
     screen_size = (args.width, args.height)
 
