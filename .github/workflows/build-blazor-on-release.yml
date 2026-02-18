@@ -1,8 +1,9 @@
 name: Build Blazor on Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -27,7 +28,7 @@ jobs:
         run: dotnet publish --configuration Release --output ./publish
 
       - name: Upload artifacts (optionnel)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: blazor-app
           path: ./publish
