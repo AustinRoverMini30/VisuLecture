@@ -1,4 +1,4 @@
-name: Build Blazor on Release
+name: Build and Release Blazor with Artifacts
 
 on:
   push:
@@ -8,27 +8,85 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
+      - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '10.0.x'  # Remplacez par votre version de .NET
+          dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - name: Build
+        run: dotnet build --configuration Release
 
-      - name: Build Blazor project
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Publish Blazor project (optionnel)
+      - name: Publish
         run: dotnet publish --configuration Release --output ./publish
 
-      - name: Upload artifacts (optionnel)
-        uses: actions/upload-artifact@v4
+      - name: Create ZIP
+        run: zip -r blazor-app.zip ./publish
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: blazor-app
-          path: ./publish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: blazor-app.zip
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+
+  build-windows:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install WiX Toolset
+        run: dotnet tool install --global wixtoolset.cli
+
+      - name: Build MSI
+        run: |
+          dotnet publish --configuration Release --output ./publish
+          wix heat dir ./publish -gg -cg FilesGroup -ke -srd -var var.SourceDir -dr INSTALLFOLDER -ke -sreg -t BlazorApp.wxs
+          candle.exe BlazorApp.wxs
+          light.exe BlazorApp.wixobj -out blazor-app.msi
+
+      - name: Upload MSI to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: blazor-app.msi
+          tag_name: ${{ github.ref_name }}
+
+  build-deb:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install fpm
+        run: sudo gem install fpm
+
+      - name: Build DEB
+        run: |
+          mkdir -p blazor-app/usr/share/blazor-app
+          cp -r ./publish/* blazor-app/usr/share/blazor-app/
+          fpm -s dir -t deb -n blazor-app -v ${{ github.ref_name }} -p blazor-app.deb blazor-app
+
+      - name: Upload DEB to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: blazor-app.deb
+          tag_name: ${{ github.ref_name }}
