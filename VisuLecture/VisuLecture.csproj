@@ -41,10 +41,10 @@
     <ItemGroup>
       <None Include="records\**\*.*" CopyToOutputDirectory="PreserveNewest" />
       <None Include="uploads\**\*.*" CopyToOutputDirectory="PreserveNewest" />
-      <None Include="beam_eye_tracker_client.dll" CopyToOutputDirectory="PreserveNewest" />
       <None Include="win64\**\*.*" CopyToOutputDirectory="PreserveNewest" />
       <None Include="*.py" CopyToOutputDirectory="PreserveNewest" />
       <None Include="requirements.txt" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="blazorLAN.pfx" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <Target Name="CopyWwwrootToOutput" AfterTargets="Build;Publish">
