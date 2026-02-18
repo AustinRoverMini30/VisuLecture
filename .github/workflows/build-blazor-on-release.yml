@@ -1,8 +1,9 @@
 name: Build Blazor on Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
