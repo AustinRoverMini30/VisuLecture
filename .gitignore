@@ -19,5 +19,6 @@
 ./VisuLecture/records/*
 ./VisuLecture/uploads/*
 ./VisuLecture/wwwroot/textImg/*
+./VisuLecture/wwwroot/pictures/themes/*
 *.db
 *.pkl
