@@ -306,14 +306,17 @@
                                                 La calibration permet d'ajuster le système d'eye-tracking pour une précision optimale.
                                             </p>
                                             <p class="instruction-text">
-                                                Suivez les points lumineux à l'écran et cliquez dessus.
+                                                <strong>@CalibrationPointsCount points</strong> apparaîtront automatiquement pendant <strong>@CalibrationDurationSeconds secondes</strong> chacun.
+                                            </p>
+                                            <p class="instruction-text">
+                                                Fixez chaque point jusqu'à ce qu'il disparaisse. Durée totale : <strong>@(CalibrationPointsCount * CalibrationDurationSeconds) secondes</strong>.
                                             </p>
                                             <RadzenButton Text="Démarrer la calibration" 
-                                                        Click="StartCalibration" 
+                                                        Click="StartCalibration"
                                                         ButtonStyle="ButtonStyle.Success"
                                                         Size="ButtonSize.Large"
                                                         class="btn-calibrate">
-                                                <RadzenIcon Icon="play_circle" /> Démarrer
+                                                <RadzenIcon Icon="fullscreen" /> Démarrer en plein écran
                                             </RadzenButton>
                                         </div>
                                     }
@@ -376,35 +379,48 @@
     
     <!-- Calibration Overlay (toujours présent, mais visible uniquement pendant la calibration) -->
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: @(isCalibrating ? "auto" : "none"); background-color: @(isCalibrating ? "rgba(0,0,0,1)" : "transparent"); z-index: 9999;">
-        @if (GetThemeName() == "défaut")
+        @if (isCalibrating)
         {
             <div style="position: absolute;
-                left: @(dotX)px;
-            top: @(dotY)px;
-            width: @(dotW)px;
-            height: @(dotW)px;
-            background-color: @(isCalibrating ? "white" : "transparent");
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            cursor: pointer;
-            pointer-events: auto;"
-                 @onclick="OnDotClick">
-            </div>
-        }
-        else
-        {
-            <img src="@GetThemeImagePath()" 
-                 style="position: absolute;
                      left: @(dotX)px;
                      top: @(dotY)px;
-                     width: @(dotW)px;
-                     height: @(dotW)px;
-                     transform: translate(-50%, -50%);
-                     cursor: pointer;
-                     pointer-events: auto;
-                     opacity: @(isCalibrating ? "1" : "0");"
-                 @onclick="OnDotClick"
-                 alt="Cible" />
+                     transform: translate(-50%, -50%);">
+                <!-- Cercle de progression -->
+                <svg width="@(dotW + 40)" height="@(dotW + 40)" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                    <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
+                            fill="none"
+                            stroke="rgba(102, 126, 234, 0.3)"
+                            stroke-width="4"/>
+                    <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
+                            fill="none"
+                            stroke="#667eea"
+                            stroke-width="4"
+                            stroke-dasharray="@(calibrationCircumference.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
+                            stroke-dashoffset="@(calibrationProgress.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
+                            stroke-linecap="round"
+                            style="transform: rotate(-90deg); transform-origin: 50% 50%;"/>
+                </svg>
+                <!-- Point de calibration -->
+                @if (GetThemeName() == "défaut")
+                {
+                    <div style="width: @(dotW)px;
+                        height: @(dotW)px;
+                        background-color: white;
+                        border-radius: 50%;
+                        position: relative;
+                        z-index: 1;">
+                    </div>
+                }
+                else
+                {
+                    <img src="@GetThemeImagePath()" 
+                         style="width: @(dotW)px;
+                             height: @(dotW)px;
+                             position: relative;
+                             z-index: 1;"
+                         alt="Cible" />
+                }
+            </div>
         }
     </div>
     
@@ -1037,6 +1053,14 @@
     private List<(int x, int y)> positions = new List<(int, int)>();
     private List<long> recordedClick = new List<long>();
     private readonly Stopwatch sw = new();
+    
+    // Variables pour la calibration automatique
+    private const int CalibrationPointsCount = 9;
+    private const int CalibrationDurationSeconds = 2; // Durée en secondes pour chaque point
+    private Timer? calibrationTimer;
+    private int calibrationElapsedMs = 0;
+    private double calibrationCircumference = 0;
+    private double calibrationProgress = 0;
 
     private CancellationTokenSource cts;
     private List<PointGaze> gazePoints = new();
@@ -1046,6 +1070,24 @@
     private int stepSelected = 0;
     private bool upButtonStat = false;
     private bool downButtonStat = false;
+
+    public void Dispose()
+    {
+        calibrationTimer?.Dispose();
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+
+    [JSInvokable]
+    public async Task OnDurationReached()
+    {
+        Console.WriteLine($"Duration reached for point {currentPosition + 1}");
+        
+        // Passer au point suivant
+        await InvokeAsync(async () => {
+            await MoveToNextCalibrationPoint();
+        });
+    }
 
     protected override void OnInitialized()
     {
@@ -1066,12 +1108,32 @@
             screenW = size.width;
             screenH = size.height;
 
-            // Définir les positions : centre, puis coins dans le sens horaire
-            positions.Add((screenW / 2, screenH / 2)); // 0: Centre
-            positions.Add((dotW, dotW)); // 1: Coin supérieur gauche
-            positions.Add((screenW - dotW, dotW)); // 2: Coin supérieur droit
-            positions.Add((screenW - dotW, screenH - dotW)); // 3: Coin inférieur droit
-            positions.Add((dotW, screenH - dotW)); // 4: Coin inférieur gauche
+            // Calculer les positions en fonction de la taille de l'écran
+            // Marges : 10% de chaque côté en largeur et en hauteur
+            int marginX = (int)(screenW * 0.1);
+            int marginY = (int)(screenH * 0.1);
+            int centerX = screenW / 2;
+            int centerY = screenH / 2;
+            int leftX = marginX;
+            int rightX = screenW - marginX;
+            int topY = marginY;
+            int bottomY = screenH - marginY;
+
+            // Définir les 9 positions selon le schéma spécifié (adapté à la taille de l'écran)
+            positions.Add((centerX, centerY));   // Point 1: Centre
+            positions.Add((leftX, topY));        // Point 2: Coin supérieur gauche
+            positions.Add((leftX, bottomY));     // Point 3: Coin inférieur gauche
+            positions.Add((rightX, topY));       // Point 4: Coin supérieur droit
+            positions.Add((rightX, bottomY));    // Point 5: Coin inférieur droit
+            positions.Add((leftX, centerY));     // Point 6: Milieu gauche
+            positions.Add((centerX, topY));      // Point 7: Milieu haut
+            positions.Add((centerX, bottomY));   // Point 8: Milieu bas
+            positions.Add((rightX, centerY));    // Point 9: Milieu droit
+
+            // Calculer la circonférence du cercle de progression
+            double radius = (dotW + 30) / 2.0;
+            calibrationCircumference = 2 * Math.PI * radius;
+            calibrationProgress = calibrationCircumference; // Commence plein
 
             // Charger les caméras disponibles
             await LoadAvailableCameras();
@@ -1252,6 +1314,8 @@
         stepSelected = 4;
 
         OnChange();
+
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task StartCalibration()
@@ -1261,53 +1325,109 @@
         // Masquer la scrollbar
         await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = 'hidden';");
 
-        // Utiliser l'ID de la lecture créée lors de la sélection du texte
-        await StartRecording(indexCalibration, readingId);
+        // Démarrer l'enregistrement avec limite de durée (en secondes)
+        await JS.InvokeVoidAsync("startRecordingWithDuration", 0, readingId, CalibrationDurationSeconds, 
+            DotNetObjectReference.Create(this));
 
         currentPosition = 0;
         dotX = positions[0].x;
         dotY = positions[0].y;
         isCalibrating = true;
+        
+        // Réinitialiser le timer (utilisé uniquement pour l'affichage visuel)
+        calibrationElapsedMs = 0;
+        calibrationProgress = calibrationCircumference;
+        
+        // Démarrer le timer automatique pour l'animation visuelle
+        StartCalibrationTimer();
     }
 
-    private async Task OnDotClick()
+    private void StartCalibrationTimer()
+    {
+        calibrationTimer?.Dispose();
+        calibrationTimer = new Timer(_ => 
+        {
+            _ = InvokeAsync(async () => await OnCalibrationTick());
+        }, null, 0, 100); // Tick toutes les 100ms
+    }
+
+    private async Task OnCalibrationTick()
     {
         if (!isCalibrating) return;
 
-        indexCalibration++;
+        calibrationElapsedMs += 100;
+        
+        // Mettre à jour la progression du cercle (de circonférence complète vers 0)
+        // Utiliser CalibrationDurationSeconds pour la durée
+        double estimatedDuration = CalibrationDurationSeconds * 1000.0; // en ms
+        double progress = (double)calibrationElapsedMs / estimatedDuration;
+        calibrationProgress = calibrationCircumference * (1 - progress);
+        
+        StateHasChanged();
 
-        await SwitchRecording();
+        // La progression est maintenant gérée par OnDurationReached()
+        // Le timer JavaScript arrête automatiquement l'enregistrement après la durée spécifiée
+    }
 
+    private async Task MoveToNextCalibrationPoint()
+    {
         currentPosition++;
-        if (currentPosition < positions.Count)
+        
+        if (currentPosition < CalibrationPointsCount)
         {
+            // Passer au point suivant
             dotX = positions[currentPosition].x;
             dotY = positions[currentPosition].y;
+            
+            // Réinitialiser le timer visuel
+            calibrationElapsedMs = 0;
+            calibrationProgress = calibrationCircumference;
+            
+            StateHasChanged();
+            
+            // Démarrer un nouvel enregistrement pour ce point avec la durée spécifiée
+            await JS.InvokeVoidAsync("startNextPointRecordingByDuration", CalibrationDurationSeconds, 
+                DotNetObjectReference.Create(this));
         }
         else
         {
-            isCalibrating = false;
-
-            // Rétablir la scrollbar
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = '';");
-
-            currentPosition = 0;
-
-            isCalibratingServer = true;
-
-            serverStat = "Envoi des vidéos au serveur en cours...";
-            await InvokeAsync(StateHasChanged);
-
-            await StopRecording();
-            await UploadVideo(readingId);
-
-            serverStat = "Calibration côté serveur en cours...";
-            await InvokeAsync(StateHasChanged);
-
-            indexCalibration = 0;
-            await CalibrationService.NotifyCalibrationCreation(readingId);
-            await CalibrateServer();
+            // Calibration terminée
+            await EndCalibration();
         }
+    }
+
+    private async Task EndCalibration()
+    {
+        calibrationTimer?.Dispose();
+        calibrationTimer = null;
+
+        isCalibrating = false;
+
+        // Rétablir la scrollbar
+        await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = '';");
+
+        currentPosition = 0;
+
+        isCalibratingServer = true;
+
+        serverStat = "Envoi des vidéos au serveur en cours...";
+        await InvokeAsync(StateHasChanged);
+
+        // Arrêter l'enregistrement de la dernière vidéo
+        await JS.InvokeVoidAsync("stopCalibrationRecordingByDuration");
+        
+        // Uploader toutes les vidéos (9 vidéos: video0.webm à video8.webm)
+        await UploadVideo(readingId);
+
+        // Enregistrer que la calibration est en attente
+        await CalibrationService.NotifyCalibrationCreation(readingId);
+        
+        serverStat = "Calibration enregistrée !";
+        await InvokeAsync(StateHasChanged);
+        
+        await Task.Delay(500); // Petit délai pour voir le message
+        
+        await CalibrateServer();
     }
 
     private async Task EnterFullScreen()
@@ -1390,10 +1510,15 @@
             // Rétablir la scrollbar
             await JSRuntime.InvokeVoidAsync("eval", "document.body.style.overflow = '';");
 
+            // Arrêter l'enregistrement
             await stopRecording2();
-            await uploadVideo2();
-
+            
+            // Mettre à jour l'état AVANT l'upload pour éviter les clics multiples
+            isReading = false;
             await InvokeAsync(StateHasChanged);
+            
+            // Upload en arrière-plan
+            await uploadVideo2();
         }
     }
 
@@ -1409,8 +1534,8 @@
 
     async Task stopRecording2()
     {
-        await SwitchRecording2();
-        await JS.InvokeVoidAsync("stopRecording", 0);
+        // Simplement arrêter l'enregistrement, sans le redémarrer
+        await JS.InvokeVoidAsync("stopRecording2Final");
     }
 
     async Task<string> getCookie()

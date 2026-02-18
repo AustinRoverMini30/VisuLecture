@@ -1,0 +1,33 @@
+name: Build Blazor on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'  # Remplacez par votre version de .NET
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build Blazor project
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish Blazor project (optionnel)
+        run: dotnet publish --configuration Release --output ./publish
+
+      - name: Upload artifacts (optionnel)
+        uses: actions/upload-artifact@v3
+        with:
+          name: blazor-app
+          path: ./publish

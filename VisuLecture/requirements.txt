@@ -1,5 +1,3 @@
 psutil
-pyautogui
-pywinauto
-opencv-python
-pyvirtualcam
+mediapipe==0.10.11
+eyetrax

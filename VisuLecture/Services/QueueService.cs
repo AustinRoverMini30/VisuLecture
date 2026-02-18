@@ -9,6 +9,8 @@ using VisuLecture.Components;
 
 public class CalibrationService : BackgroundService
 {
+    private readonly ILogger<CalibrationService> _logger;
+    private const string ConfigFilePath = "calibration_config.txt";
     
     public string clientId = "";
     
@@ -18,12 +20,26 @@ public class CalibrationService : BackgroundService
         = new();
     private CancellationTokenSource cts;
     private List<PointGaze> gazePoints = new();
+    
+    public string calibrationModel = "none";
+    
+    public CalibrationService(ILogger<CalibrationService> logger)
+    {
+        _logger = logger;
+        _logger.LogInformation("CalibrationService constructor called");
+        
+        // Charger le modèle de calibration depuis le fichier
+        LoadCalibrationModel();
+    }
     public bool IsClientWaiting(string clientId)
     {
         return _waitingCalibrations.ContainsKey(clientId);
     }
     public void Enqueue(string clientId, string textRecordFilePath)
     {
+        _logger.LogInformation($"Enqueue called for clientId: {clientId}");
+        Console.WriteLine($"Enqueue called for clientId: {clientId}");
+        
         if (!_waitingCalibrations.ContainsKey(clientId))
         {
             Console.WriteLine("clientId souhaité : " +  clientId);
@@ -34,77 +50,163 @@ public class CalibrationService : BackgroundService
             {
                 Console.WriteLine(" - " + id);
             }
+            
+            _logger.LogWarning($"ClientId {clientId} not found in waiting calibrations");
             return;
         }
+        
         _queue.Enqueue((clientId, textRecordFilePath));
         _signal.Release(); // Réveille le consommateur
+        
+        _logger.LogInformation($"Task queued for clientId: {clientId}");
+        Console.WriteLine($"Task queued for clientId: {clientId}, signal released");
+    }
+    
+    /// <summary>
+    /// Réanalyse les données d'une lecture existante
+    /// </summary>
+    public void EnqueueReanalysis(string clientId, string textRecordFilePath)
+    {
+        _logger.LogInformation($"EnqueueReanalysis called for clientId: {clientId}");
+        Console.WriteLine($"EnqueueReanalysis called for clientId: {clientId}");
+        
+        // Pour la réanalyse, on ajoute directement à la queue sans vérifier _waitingCalibrations
+        // car les vidéos existent déjà
+        _queue.Enqueue((clientId, textRecordFilePath));
+        _signal.Release(); // Réveille le consommateur
+        
+        _logger.LogInformation($"Reanalysis task queued for clientId: {clientId}");
+        Console.WriteLine($"Reanalysis task queued for clientId: {clientId}, signal released");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await StartProcessingAsync(stoppingToken);
+        _logger.LogInformation("CalibrationService ExecuteAsync STARTED");
+        Console.WriteLine("CalibrationService ExecuteAsync STARTED");
+        
+        try
+        {
+            await StartProcessingAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in ExecuteAsync");
+            Console.WriteLine($"Error in ExecuteAsync: {ex.Message}");
+        }
     }
     
    private async Task StartProcessingAsync(CancellationToken token)
     {
+        _logger.LogInformation("StartProcessingAsync - Waiting for calibration tasks...");
+        Console.WriteLine("StartProcessingAsync - Waiting for calibration tasks...");
+        
         while (!token.IsCancellationRequested)
         {
+            _logger.LogInformation("Waiting for signal...");
             await _signal.WaitAsync(token);
 
+            _logger.LogInformation("Signal received! Processing task...");
+            Console.WriteLine("Signal received! Processing task...");
+            
             if (_queue.TryDequeue(out var action))
+            {
                 await HandleActionAsync(action, token);
+            }
         }
     }
 
     private async Task HandleActionAsync((string, string) tuple, CancellationToken token)
     {
-        
         clientId = tuple.Item1;
         var textRecordFilePath = tuple.Item2;
         
-        Console.WriteLine("Started new action");
-        string pythonExe = "python";
-        string videoPath = $@"uploads\{clientId}\\";
+        _logger.LogInformation($"HandleActionAsync started for clientId: {clientId}");
+        Console.WriteLine($"HandleActionAsync: Started processing for {clientId}");
+        
+        string pythonExe = "python3.11";
+        string videoPrefix = $@"uploads/{clientId}/video"; // Préfixe pour video0.webm, video1.webm, etc.
         string calibScriptPath = @"Calibrate.py";
         string readScriptPath = @"Reading.py";
         string cleanDataScriptPath = @"clean_data.py";
-        string pointsCsv = "records/" + clientId;
+        string pointsCsv = "records/" + clientId + "/raw.csv";
         string wordsCsv = "wwwroot/"+textRecordFilePath+"/resultats_ocr.csv";
         string outputCsv = "records/" + clientId + "/cleaned.csv";
-        var process = new Process
+        
+        // Exécuter le script de calibration Python avec le préfixe des vidéos
+        Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
+        _logger.LogInformation($"Starting Calibrate.py for {clientId}");
+        
+        Console.WriteLine($"Modèle de calibration utilisé : {calibrationModel}");
+        
+        var calibProcess = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = $"\"{calibScriptPath}\" \"{videoPath}\" 30",
-                UseShellExecute = false
+                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width 1920 --height 1080 --model {calibrationModel}",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             }
         };
 
-        process.Start();
+        calibProcess.Start();
+        
+        // Afficher les logs Python pour le debug
+        string output = await calibProcess.StandardOutput.ReadToEndAsync();
+        string error = await calibProcess.StandardError.ReadToEndAsync();
+        
+        if (!string.IsNullOrEmpty(output))
+        {
+            Console.WriteLine($"Calibrate.py output: {output}");
+            _logger.LogInformation($"Calibrate.py output: {output}");
+        }
+        if (!string.IsNullOrEmpty(error))
+        {
+            Console.WriteLine($"Calibrate.py error: {error}");
+            _logger.LogError($"Calibrate.py error: {error}");
+        }
             
-        await process.WaitForExitAsync(token);
+        await calibProcess.WaitForExitAsync();
+        Console.WriteLine($"Calibrate.py terminé avec code: {calibProcess.ExitCode}");
+        _logger.LogInformation($"Calibrate.py finished with exit code: {calibProcess.ExitCode}");
+        
         cts = new CancellationTokenSource();
         gazePoints.Clear();
         
-        Task.Run(() => getGazePoints(cts.Token));
+        // Exécuter Reading.py
+        Console.WriteLine($"Lancement de Reading.py pour {clientId}...");
+        _logger.LogInformation($"Starting Reading.py for {clientId}");
         
-        await Process.Start(pythonExe, $"\"{readScriptPath}\" \"{videoPath}\" 30").WaitForExitAsync();
+        string videoPath = $@"uploads/{clientId}/reading.webm";
+        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width 1920 --height 1080 --model {calibrationModel}").WaitForExitAsync();
         
-        cts.Cancel();
-        SavePointsToCsv(gazePoints, "records/" + clientId, "raw.csv");
+        Console.WriteLine($"Reading.py terminé pour {clientId}");
+        _logger.LogInformation($"Reading.py finished for {clientId}");
+        
+        // Exécuter clean_data.py
+        Console.WriteLine($"Lancement de clean_data.py pour {clientId}...");
+        _logger.LogInformation($"Starting clean_data.py for {clientId}");
         
         await Process.Start(
             pythonExe,
             $"\"{cleanDataScriptPath}\" -p \"{pointsCsv}\" -w \"{wordsCsv}\" -o \"{outputCsv}\""
         ).WaitForExitAsync();
 
+        Console.WriteLine($"clean_data.py terminé pour {clientId}");
+        _logger.LogInformation($"clean_data.py finished for {clientId}");
+        
+        Console.WriteLine($"Traitement complet terminé pour {clientId}");
+        _logger.LogInformation($"Complete processing finished for {clientId}");
+        
         clientId = "";
     }
     
     public Task NotifyCalibrationCreation(string clientId)
     {
         _waitingCalibrations[clientId] = DateTime.Now;
+        _logger.LogInformation($"NotifyCalibrationCreation called for clientId: {clientId}");
+        Console.WriteLine($"NotifyCalibrationCreation: Added {clientId} to waiting calibrations");
         return Task.CompletedTask;
     }
     
@@ -151,6 +253,64 @@ public class CalibrationService : BackgroundService
                 }
             }
             api.WaitForNewTrackingData(ref timestamp, 1000);
+        }
+    }
+    
+    /// <summary>
+    /// Sauvegarde le modèle de calibration dans un fichier texte
+    /// </summary>
+    public void SaveCalibrationModel()
+    {
+        try
+        {
+            File.WriteAllText(ConfigFilePath, calibrationModel);
+            _logger.LogInformation($"Modèle de calibration sauvegardé : {calibrationModel}");
+            Console.WriteLine($"Modèle de calibration sauvegardé dans {ConfigFilePath} : {calibrationModel}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de la sauvegarde du modèle de calibration");
+            Console.WriteLine($"Erreur lors de la sauvegarde du modèle de calibration : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Charge le modèle de calibration depuis un fichier texte
+    /// </summary>
+    private void LoadCalibrationModel()
+    {
+        try
+        {
+            if (File.Exists(ConfigFilePath))
+            {
+                string loadedModel = File.ReadAllText(ConfigFilePath).Trim();
+                
+                // Valider que le modèle chargé est valide
+                var validModels = new[] { "none", "elastic_net", "linear_svr", "ridge", "svr", "tiny_mlp" };
+                if (validModels.Contains(loadedModel))
+                {
+                    calibrationModel = loadedModel;
+                    _logger.LogInformation($"Modèle de calibration chargé : {calibrationModel}");
+                    Console.WriteLine($"Modèle de calibration chargé depuis {ConfigFilePath} : {calibrationModel}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Modèle invalide dans le fichier : {loadedModel}. Utilisation du modèle par défaut 'none'.");
+                    Console.WriteLine($"Modèle invalide dans le fichier : {loadedModel}. Utilisation du modèle par défaut 'none'.");
+                    calibrationModel = "none";
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Fichier de configuration non trouvé. Utilisation du modèle par défaut : {calibrationModel}");
+                Console.WriteLine($"Fichier de configuration non trouvé. Utilisation du modèle par défaut : {calibrationModel}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors du chargement du modèle de calibration");
+            Console.WriteLine($"Erreur lors du chargement du modèle de calibration : {ex.Message}");
+            calibrationModel = "none"; // Valeur par défaut en cas d'erreur
         }
     }
 

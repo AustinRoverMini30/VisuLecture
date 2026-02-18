@@ -39,47 +39,29 @@
             <div class="status-card">
                 <div class="status-header">
                     <div class="status-icon">
-                        <img src="/pictures/beam.png" alt="BeamEye" style="width: 100%; height: 100%; object-fit: contain;" />
+                        <img src="/pictures/github.png" alt="EyeTrax" style="width: 100%; height: 100%; object-fit: contain;" />
                     </div>
                     <div class="status-info">
-                        <h3 class="status-title">État BeamEye Tracker</h3>
-                        <p class="status-description">Surveillance du système d'eye-tracking</p>
+                        <h3 class="status-title">EyeTrax</h3>
+                        <p class="status-description">Paramétrage du système de suivi oculaire</p>
                     </div>
                 </div>
                 
                 <div class="status-content">
-                    @if (BeamStatus == "En cours")
-                    {
-                        <div class="status-display running">
-                            <RadzenBadge BadgeStyle="BadgeStyle.Success" Text=@BeamStatus class="custom-badge"></RadzenBadge>
-                            <div class="status-buttons">
-                                <RadzenButton Click="@RestartBeam" class="btn-restart">
-                                    <RadzenIcon Icon="refresh" /> Redémarrer
-                                </RadzenButton>
-                                <RadzenButton ButtonStyle="ButtonStyle.Danger" Click="@StopBeam" class="btn-stop">
-                                    <RadzenIcon Icon="stop" /> Arrêter
-                                </RadzenButton>
-                            </div>
-                        </div>
-                    }
-                    else if (BeamStatus == "Redémarrage..." || BeamStatus == "Arrêt en cours..." || BeamStatus == "Démarrage en cours...")
-                    {
-                        <div class="status-display loading">
-                            <RadzenStack Orientation="Orientation.Horizontal" Gap="15px" AlignItems="AlignItems.Center">
-                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Text=@BeamStatus class="custom-badge"></RadzenBadge>
-                                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" AriaLabel="Loading"/>
-                            </RadzenStack>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="status-display stopped">
-                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text=@BeamStatus class="custom-badge"></RadzenBadge>
-                            <RadzenButton Click="@StartBeam" class="btn-start">
-                                <RadzenIcon Icon="play_arrow" /> Démarrer
-                            </RadzenButton>
-                        </div>
-                    }
+                    <div class="status-info">
+                        
+                        <h3 class="status-title">Mode de calibration</h3>
+                        <RadzenRadioButtonList @bind-Value=@calibrationModel TValue="int" Change="@ChangeModel">
+                            <Items>
+                                <RadzenRadioButtonListItem Text="Aucun" Value="1"/>
+                                <RadzenRadioButtonListItem Text="elastic_net" Value="2"/>
+                                <RadzenRadioButtonListItem Text="linear_svr" Value="3"/>
+                                <RadzenRadioButtonListItem Text="ridge" Value="4"/>
+                                <RadzenRadioButtonListItem Text="svr" Value="5"/>
+                                <RadzenRadioButtonListItem Text="tiny_mlp" Value="6"/>
+                            </Items>
+                        </RadzenRadioButtonList>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1572,6 +1554,8 @@
     private string newTextTitle;
     private string newTextContent;
     private Student newStudentModel = new Student();
+
+    private int calibrationModel;
     
     private int selectedInputMode = 1;
     private byte[]? uploadedImageBytes = null;
@@ -1689,15 +1673,124 @@ private async Task GenererImage()
 
     await InvokeAsync(StateHasChanged);
 }
-    private async Task AnalyserImage(byte[] imageBytes)
+private async Task AnalyserImage(byte[] imageBytes)
+{
+    try
     {
-        try
-        {
-            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
-            resultats.Clear();
+        resultats.Clear();
 
-            // Caractères spéciaux à retirer (SANS apostrophes et tirets)
-            var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
+        // Caractères spéciaux à retirer (SANS apostrophes et tirets)
+        var symbols = new HashSet<string> { "?", "!", ".", ",", ";", ":", "\"", "«", "»", "(", ")", "[", "]", "{", "}", "_", "—", "…", "/", "\\", "|" };
+
+        if (Environment.OSVersion.Platform == PlatformID.Unix)
+        {
+            // === MODE LINUX : utiliser le CLI tesseract ===
+            string tempImagePath = Path.Combine(Path.GetTempPath(), $"ocr_temp_{Guid.NewGuid()}.png");
+            string tempTsvPath = Path.Combine(Path.GetTempPath(), $"ocr_temp_{Guid.NewGuid()}");
+            
+            try
+            {
+                // Sauvegarder l'image temporairement
+                await File.WriteAllBytesAsync(tempImagePath, imageBytes);
+
+                // Exécuter tesseract en CLI
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "tesseract",
+                    Arguments = $"\"{tempImagePath}\" \"{tempTsvPath}\" -l fra tsv",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = Process.Start(psi);
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode != 0)
+                {
+                    string error = await process.StandardError.ReadToEndAsync();
+                    throw new Exception($"Tesseract a échoué : {error}");
+                }
+
+                // Lire le fichier TSV généré
+                string tsvFile = tempTsvPath + ".tsv";
+                if (!File.Exists(tsvFile))
+                    throw new Exception("Le fichier TSV n'a pas été généré");
+
+                var lines = await File.ReadAllLinesAsync(tsvFile);
+                int lineNum = 0;
+                float prevRight = 0;
+                float espace = 0;
+
+                // Parser le TSV (ignorer la première ligne d'en-tête)
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    var parts = lines[i].Split('\t');
+                    if (parts.Length < 12) continue;
+
+                    // Vérifier si c'est un mot (level = 5)
+                    if (parts[0] != "5") continue;
+
+                    string mot = parts[11].Trim();
+                    if (string.IsNullOrWhiteSpace(mot)) continue;
+
+                    int x = int.Parse(parts[6], System.Globalization.CultureInfo.InvariantCulture);
+                    int y = int.Parse(parts[7], System.Globalization.CultureInfo.InvariantCulture);
+                    int width = int.Parse(parts[8], System.Globalization.CultureInfo.InvariantCulture);
+                    int height = int.Parse(parts[9], System.Globalization.CultureInfo.InvariantCulture);
+                    float conf = float.Parse(parts[10], System.Globalization.CultureInfo.InvariantCulture);
+
+
+                    int blockNum = int.Parse(parts[2]);
+                    if (blockNum != lineNum)
+                    {
+                        lineNum = blockNum;
+                        prevRight = 0;}
+
+                    // Nettoyer le mot
+                    string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
+                    if (string.IsNullOrWhiteSpace(motNettoye)) continue;
+
+                    if (prevRight > 0)
+                    {
+                        espace = x - prevRight;
+                        if (espace < 0) espace = x / 2f;
+                    }
+                    else
+                    {
+                        espace = 0;
+                    }
+
+                    resultats.Add(new ResultatOCR
+                    {
+                        Mot = motNettoye,
+                        X = (int)(x - (espace / 2f)),
+                        Y = y,
+                        Largeur = (int)(width + espace),
+                        Hauteur = height,
+                        Ligne = lineNum,
+                        Espace = (int)espace,
+                        Confiance = (int)conf
+                    });
+
+                    prevRight = x + width;
+                }
+
+                // Nettoyer les fichiers temporaires
+                if (File.Exists(tempImagePath)) File.Delete(tempImagePath);
+                if (File.Exists(tsvFile)) File.Delete(tsvFile);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erreur CLI Tesseract : {ex.Message}");
+                throw;
+            }
+        }
+        else
+        {
+            // === MODE WINDOWS : utiliser l'API Tesseract ===
+            string tessDataPath = @"C:\Program Files\Tesseract-OCR\tessdata";
 
             using var engine = new TesseractEngine(tessDataPath, "fra", EngineMode.Default);
             using var pix = Pix.LoadFromMemory(imageBytes);
@@ -1722,12 +1815,8 @@ private async Task GenererImage()
                     string mot = iter.GetText(PageIteratorLevel.Word)?.Trim() ?? "";
                     float conf = iter.GetConfidence(PageIteratorLevel.Word) * 100;
 
-                    // Nettoyer le mot en retirant tous les caractères spéciaux
                     string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
-                    
-                    // Ignorer si le mot est vide après nettoyage ou ne contient que des symboles
-                    if (string.IsNullOrWhiteSpace(motNettoye))
-                        continue;
+                    if (string.IsNullOrWhiteSpace(motNettoye)) continue;
 
                     if (prevRight > 0)
                     {
@@ -1753,42 +1842,42 @@ private async Task GenererImage()
 
                     prevRight = rect.X2;
                 }
-
             } while (iter.Next(PageIteratorLevel.Word));
-            
-            // En mode IMAGE, remplir automatiquement newTextContent avec le texte détecté
-            if (selectedInputMode == 2 && resultats.Count > 0)
-            {
-                // Reconstruire le texte à partir des résultats OCR
-                var textBuilder = new StringBuilder();
-                int currentLine = 0;
-                
-                foreach (var r in resultats.OrderBy(x => x.Ligne).ThenBy(x => x.X))
-                {
-                    if (r.Ligne > currentLine)
-                    {
-                        textBuilder.AppendLine(); // Nouvelle ligne
-                        currentLine = r.Ligne;
-                    }
-                    else if (textBuilder.Length > 0 && !textBuilder.ToString().EndsWith("\n"))
-                    {
-                        textBuilder.Append(" "); // Espace entre les mots
-                    }
-                    
-                    textBuilder.Append(r.Mot);
-                }
-                
-                newTextContent = textBuilder.ToString().Trim();
-                Console.WriteLine($"Texte reconstruit depuis OCR : {newTextContent.Length} caractères");
-            }
-            
-            Console.WriteLine($"OCR terminé : {resultats.Count} mots détectés");
         }
-        catch (Exception ex)
+
+        // En mode IMAGE, remplir automatiquement newTextContent avec le texte détecté
+        if (selectedInputMode == 2 && resultats.Count > 0)
         {
-            Console.WriteLine("Erreur OCR : " + ex.Message);
+            var textBuilder = new StringBuilder();
+            int currentLine = 0;
+
+            foreach (var r in resultats.OrderBy(x => x.Ligne).ThenBy(x => x.X))
+            {
+                if (r.Ligne > currentLine)
+                {
+                    textBuilder.Append("\n");
+                    currentLine = r.Ligne;
+                }
+                else if (textBuilder.Length > 0 && !textBuilder.ToString().EndsWith("\n"))
+                {
+                    textBuilder.Append(" ");
+                }
+
+                textBuilder.Append(r.Mot);
+            }
+
+            newTextContent = textBuilder.ToString().Trim();
+            Console.WriteLine($"Texte reconstruit depuis OCR : {newTextContent.Length} caractères");
         }
+
+        Console.WriteLine($"OCR terminé : {resultats.Count} mots détectés");
     }
+    catch (Exception ex)
+    {
+        Console.WriteLine("Erreur OCR : " + ex.Message);
+        Console.WriteLine(ex.StackTrace);
+    }
+}
 
     private async Task ExporterCSV(string path)
     {
@@ -1838,6 +1927,18 @@ private async Task GenererImage()
         TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
         Themes = new List<Theme>(Db.Themes.AsEnumerable());
         bool running = IsProcessRunning("BeamEyeTracker");
+        
+        // Initialiser calibrationModel selon la valeur chargée depuis le fichier
+        calibrationModel = CalibrationService.calibrationModel switch
+        {
+            "none" => 1,
+            "elastic_net" => 2,
+            "linear_svr" => 3,
+            "ridge" => 4,
+            "svr" => 5,
+            "tiny_mlp" => 6,
+            _ => 1 // Valeur par défaut
+        };
         
         // Nettoyage automatique des dossiers orphelins
         CleanupOrphanedTextFolders();
@@ -2963,6 +3064,37 @@ private async Task GenererImage()
                 });
             }
         }
+    }
+
+    private void ChangeModel(int obj)
+    {
+        if (obj == 1)
+        {
+            CalibrationService.calibrationModel = "none";
+        }
+        else if (obj == 2)
+        {
+            CalibrationService.calibrationModel = "elastic_net";
+        }
+        else if (obj == 3)
+        {
+            CalibrationService.calibrationModel = "linear_svr";
+        }
+        else if (obj == 4)
+        {
+            CalibrationService.calibrationModel = "ridge";
+        }
+        else if (obj == 5)
+        {
+            CalibrationService.calibrationModel = "svr";
+        }
+        else if (obj == 6)
+        {
+            CalibrationService.calibrationModel = "tiny_mlp";
+        }
+        
+        // Sauvegarder le modèle de calibration dans un fichier
+        CalibrationService.SaveCalibrationModel();
     }
 
 }

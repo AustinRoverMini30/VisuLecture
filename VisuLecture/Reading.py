@@ -1,110 +1,115 @@
 import datetime
-import subprocess
 import os
-import psutil
-from pywinauto.application import Application
-from pywinauto import Desktop
 import sys, cv2, pyvirtualcam
+import argparse
+import numpy as np
 
-# --- CLI ---
-if len(sys.argv) < 2:
-    print("Usage: vcam_worker.py <video_path> [fps]")
-    sys.exit(1)
+from eyetrax import GazeEstimator, run_9_point_calibration
+import csv
 
-video_path = sys.argv[1]
-target_fps = float(sys.argv[2]) if len(sys.argv) > 2 else 30.0
+from eyetrax.filters import KDESmoother, NoSmoother
 
-def play_video(video_path: str, target_fps: float = 30.0):
-    """Lit le fichier vidéo et l'envoie à la caméra virtuelle.
-    Déclenche video_done quand la lecture est terminée.
-    """
+list_points = []
+
+parser = argparse.ArgumentParser(
+    description="Lecture pour EyeTrax via webcam virtuelle"
+)
+
+parser.add_argument(
+    "--video",
+    type=str
+)
+
+parser.add_argument(
+    "--csv",
+    type=str
+)
+
+parser.add_argument(
+    "--filter",
+    type=str
+)
+
+parser.add_argument(
+    "--model",
+    type=str
+)
+
+parser.add_argument(
+    "--width",
+    type=str
+)
+
+parser.add_argument(
+    "--height",
+    type=str
+)
+
+args = parser.parse_args()
+
+video_path = args.video
+csv_path = args.csv
+filter = args.filter
+screen_width, screen_height = args.width, args.height
+
+def record_to_csv(data: list, csv_path: str):
+    dir_path = os.path.dirname(csv_path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+    with open(csv_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['timestamp', 'x', 'y'])
+        for timestamp, x, y in data:
+            writer.writerow([timestamp, x, y])
+
+
+def record_gaze(video_path: str):
+    # Load model
+
+    if args.model != "none":
+        print("Modèle spécifié:", args.model)
+        estimator = GazeEstimator(model_name=args.model)
+    else:
+        print("Aucun modèle spécifié, utilisation du modèle par défaut.")
+        estimator = GazeEstimator()
+    estimator.load_model("gaze_model.pkl")
 
     cap = cv2.VideoCapture(video_path)
+
     if not cap.isOpened():
-        raise RuntimeError(f"Cannot open {video_path}")
+        raise ValueError(f"Impossible d'ouvrir la vidéo : {video_path}")
 
-    ok, frame = cap.read()
-    if not ok:
-        cap.release()
-        raise RuntimeError("Empty video")
+    while True:
+        # Extract features from frame
+        ret, frame = cap.read()
 
-    h, w = frame.shape[:2]
-    try:
-        with pyvirtualcam.Camera(width=w, height=h, fps=target_fps, print_fps=False, device="Unity Video Capture") as cam:
-            # Repars du début
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        if not ret or frame is None:
+            break
 
-            print("début", datetime.datetime.now())
-            while True:
-                ok, frame = cap.read()
-                if not ok:
-                    break  # fin de vidéo
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                cam.send(rgb)
-                cam.sleep_until_next_frame()# cadence régulière
-            print("Video playback done.", datetime.datetime.now())
+        features, blink = estimator.extract_features(frame)
 
-        cam.close()
-    finally:
-        cap.release()
+        # Predict screen coordinates
+        if features is not None and not blink:
+            gaze_point = estimator.predict(np.array([features]))[0]
+            x, y = map(int, gaze_point)
 
-def openBeamEye():
-    # Chemin de BeamEye.exe
-    path = r"C:\Program Files\Eyeware\BeamEyeTracker\BeamEyeTracker.exe"
-    folder = os.path.dirname(path)
+            if filter == "kde":
+                smoother = KDESmoother(screen_width, screen_height)
+            else:
+                smoother = NoSmoother()
 
-    subprocess.Popen(
-        [path],
-        cwd=folder,
-        creationflags=0x08000000  # CREATE_NO_WINDOW
-    )
+            x_pred, y_pred = smoother.step(x, y)
+            print(f"Gaze: ({x_pred}, {y_pred})")
+            list_points.append((datetime.datetime.now().timestamp(), round(x_pred), round(y_pred)))
 
-    app = Application(backend="uia").connect(path=path)
+    cap.release()
 
-def closeBeamEye():
-    for proc in psutil.process_iter(['pid', 'name']):
-        if proc.info['name'] == 'BeamEyeTracker.exe':
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except psutil.TimeoutExpired:
-                proc.kill()
 
-def click():
-    play_video(video_path + "reading.webm", target_fps)
-
-tryRead = True
-
-while (tryRead):
-    try:
-        openBeamEye()
-        # Récupérer le panneau latéral principal
-        panel = Desktop(backend="uia").window(title_re=".*BeamEye.*", found_index=0)
-        panel.wait("visible enabled ready", timeout=60)
-
-        # Cliquer sur le bouton "Calibrer"
-        btn = panel.child_window(
-            auto_id="QApplication.SenseTrayMenu.TrayMenuMainFrame.QStackedWidget.QFrame.TrayMenuExtensionsAPIRowBoxWidget.AnimatedToggle",
-            control_type="CheckBox"
-        )
-
-        btn.wait("visible enabled ready", timeout=10)
-
-        # On récupère l'état ON/OFF
-        try:
-            state = btn.get_toggle_state()  # 0 = OFF, 1 = ON
-        except:
-            # fallback pour Qt si TogglePattern absent
-            val = btn.get_value()
-            state = 1 if str(val).lower() in ("true", "1") else 0
-
-        # Si désactivé → on clique
-        if state == 0:
-            btn.click_input()
-
-        click()
-
-        tryRead = False
-    except Exception as e:
-        print("Erreur durant la lecture :", e)
-        closeBeamEye()
+try:
+    print("Début de l'enregistrement du regard...")
+    record_gaze(video_path)
+    print("Enregistrement terminé. Sauvegarde des données dans le fichier CSV...")
+    record_to_csv(list_points, csv_path)
+    print(f"Enregistrement terminé. Données sauvegardées dans {csv_path}")
+except Exception as e:
+    print("Erreur durant la lecture :", e)
