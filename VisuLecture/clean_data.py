@@ -107,7 +107,8 @@ def main():
     parser.add_argument("--words", help="csv words path", default=None)
     parser.add_argument("--cleaned", help="output csv path", default="points_cleaned.csv")
     parser.add_argument("--normalized", help="output csv path", default="points_normalized.csv")
-    parser.add_argument("--smoothed", help="output csv path", default="points_smooth.csv")
+    parser.add_argument("--smoothedBoth", help="output csv path", default="points_smoothBoth.csv")
+    parser.add_argument("--smoothedY", help="output csv path", default="points_smoothY.csv")
     args = parser.parse_args()
 
     corrected = cleanData(args.points, args.words)  # recalibrage homographie
@@ -120,10 +121,17 @@ def main():
     
     normalized = normalize_points_to_lines(corrected, line_ys)
     write_points(normalized, args.normalized)
+
+    smoothedBoth = corrected.copy()
     
     for i in range(100):
-        corrected = apply_savitzky_golay(corrected, window_length=11, polyorder=3, axis='y', include_jumps=False)
-    write_points(corrected, args.smoothed)
+        smoothedBoth = apply_savitzky_golay(smoothedBoth, window_length=11, polyorder=3, axis='both', include_jumps=False)
+    write_points(smoothedBoth, args.smoothedBoth)
+
+    smoothedY = corrected.copy()
+    for i in range(100):
+        smoothedY = apply_savitzky_golay(smoothedY, window_length=11, polyorder=3, axis='y', include_jumps=False)
+    write_points(smoothedY, args.smoothedY)
 
 def getLinesList(words_df):
     return list(words_df.groupby("ligne")["y"].mean().round().astype(int).reset_index()["y"])

@@ -101,8 +101,13 @@
                     </div>
                     
                     <div class="control-group">
-                        <RadzenCheckBox @bind-Value=@isSmoothedVisible Change="@UpdateOverlay" TValue="bool" />
-                        <RadzenLabel Text="Données lissées" class="control-label teal-label" />
+                        <RadzenCheckBox @bind-Value=@isSmoothedBothVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Données lissées (X & Y)" class="control-label teal-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isSmoothedYVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Données lissées (Y)" class="control-label teal-label" />
                     </div>
                     
                     <div class="control-group">
@@ -240,19 +245,22 @@
     private List<(double x, double y)> pointsRaw = new();
     private List<(double x, double y)> pointsCleaned = new();
     private List<(double x, double y)> pointsNormalized = new();
-    private List<(double x, double y)> pointsSmoothed = new();
+    private List<(double x, double y)> pointsSmoothedBoth = new();
+    private List<(double x, double y)> pointsSmoothedY = new();
     private List<List<(double x, double y)>> saccadesGroups = new(); // Liste de groupes de saccades
     
     // Listes de sauts par courbe
     private List<List<(double x, double y)>> jumpGroupsRaw = new(); // Sauts pour données brutes (cleaned.csv)
     private List<List<(double x, double y)>> jumpGroupsRawCalibrated = new(); // Sauts pour données calibrées (raw.csv)
     private List<List<(double x, double y)>> jumpGroupsNormalized = new(); // Sauts pour données normalisées
-    private List<List<(double x, double y)>> jumpGroupsSmoothed = new(); // Sauts pour données lissées
+    private List<List<(double x, double y)>> jumpGroupsSmoothedBoth = new(); // Sauts pour données lissées
+    private List<List<(double x, double y)>> jumpGroupsSmoothedY = new(); // Sauts pour données lissées
     
     private bool isRawVisible = false;
     private bool isCleanedVisible = false;
     private bool isNormalizedVisible = false;
-    private bool isSmoothedVisible = false;
+    private bool isSmoothedBothVisible = false;
+    private bool isSmoothedYVisible = false;
     private bool isDensityVisible = false;
     private bool isWordBoxVisible = false;
     private bool isThickenLinesEnabled = false;
@@ -336,15 +344,27 @@
             }
         }
         
-        if (isSmoothedVisible && pointsSmoothed != null && pointsSmoothed.Count > 0)
+        if (isSmoothedBothVisible && pointsSmoothedBoth != null && pointsSmoothedBoth.Count > 0)
         {
             if (isThickenLinesEnabled)
             {
-                await DrawThickenedLine(pointsSmoothed, jumpGroupsSmoothed, "#20c997", "#17a2b8", hideJumps);
+                await DrawThickenedLine(pointsSmoothedBoth, jumpGroupsSmoothedBoth, "#20c997", "#17a2b8", hideJumps);
             }
             else
             {
-                await DrawCurveWithJumps(pointsSmoothed, jumpGroupsSmoothed, "#20c997", "#17a2b8", hideJumps);
+                await DrawCurveWithJumps(pointsSmoothedBoth, jumpGroupsSmoothedBoth, "#20c997", "#17a2b8", hideJumps);
+            }
+        }
+        
+        if (isSmoothedYVisible && pointsSmoothedY != null && pointsSmoothedY.Count > 0)
+        {
+            if (isThickenLinesEnabled)
+            {
+                await DrawThickenedLine(pointsSmoothedY, jumpGroupsSmoothedY, "#fc037b", "#17a2b8", hideJumps);
+            }
+            else
+            {
+                await DrawCurveWithJumps(pointsSmoothedY, jumpGroupsSmoothedY, "#fc037b", "#17a2b8", hideJumps);
             }
         }
         
@@ -414,25 +434,25 @@
         showedStudent = reading.Student;
         textRecord = reading.TextRecord;
         
-        var csvPath = "records/" + readingId + "/raw.csv";
-        var csvRaw = "records/" + readingId + "/cleaned.csv";
+        var csvRaw = "records/" + readingId + "/raw.csv";
+        var csvCleaned = "records/" + readingId + "/cleaned.csv";
 
-        if (!File.Exists(csvPath))
+        if (!File.Exists(csvRaw))
         {
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Warning,
                 Summary = "CSV manquant",
-                Detail = $"Fichier introuvable : {csvPath}"
+                Detail = $"Fichier introuvable : {csvRaw}"
             });
             return;
         }
 
         // Charger les données calibrées (raw.csv) avec les sauts
-        await LoadPointsAndJumps(csvPath, pointsRaw, jumpGroupsRawCalibrated);
+        await LoadPointsAndJumps(csvRaw, pointsRaw, jumpGroupsRawCalibrated);
         
         // Charger les données brutes (cleaned.csv) avec les sauts et saccades
-        var csv = await File.ReadAllLinesAsync(csvRaw);
+        var csv = await File.ReadAllLinesAsync(csvCleaned);
 
         pointsCleaned.Clear();
         saccadesGroups.Clear();
@@ -529,10 +549,17 @@
         }
         
         // Charger les données lissées si disponibles
-        var csvSmoothed = "records/" + readingId + "/smoothed.csv";
-        if (File.Exists(csvSmoothed))
+        var csvSmoothedBoth = "records/" + readingId + "/smoothedBoth.csv";
+        if (File.Exists(csvSmoothedBoth))
         {
-            await LoadPointsAndJumps(csvSmoothed, pointsSmoothed, jumpGroupsSmoothed);
+            await LoadPointsAndJumps(csvSmoothedBoth, pointsSmoothedBoth, jumpGroupsSmoothedBoth);
+        }
+        
+        // Charger les données lissées si disponibles
+        var csvSmoothedY = "records/" + readingId + "/smoothedY.csv";
+        if (File.Exists(csvSmoothedY))
+        {
+            await LoadPointsAndJumps(csvSmoothedY, pointsSmoothedY, jumpGroupsSmoothedY);
         }
         
         // Effectuer l'analyse des mots

@@ -157,7 +157,8 @@ public class CalibrationService : BackgroundService
         string wordsCsv = "wwwroot/"+textRecordFilePath+"/resultats_ocr.csv";
         string outputCleanedCsv = "records/" + clientId + "/cleaned.csv";
         string outputNormalizedCsv = "records/" + clientId + "/normalized.csv";
-        string outputSmoothedCsv = "records/" + clientId + "/smoothed.csv";
+        string outputSmoothedBothCsv = "records/" + clientId + "/smoothedBoth.csv";
+        string outputSmoothedYCsv = "records/" + clientId + "/smoothedY.csv";
         
         // Exécuter le script de calibration Python avec le préfixe des vidéos
         Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
@@ -218,7 +219,7 @@ public class CalibrationService : BackgroundService
         await Process.Start(
             pythonExe,
             $"\"{cleanDataScriptPath}\" --points \"{pointsCsv}\" --words \"{wordsCsv}\" --cleaned \"{outputCleanedCsv}\" " +
-            $"--normalized \"{outputNormalizedCsv}\" --smoothed \"{outputSmoothedCsv}\""
+            $"--normalized \"{outputNormalizedCsv}\" --smoothedBoth \"{outputSmoothedBothCsv}\" --smoothedY \"{outputSmoothedYCsv}\""
         ).WaitForExitAsync();
 
         Console.WriteLine($"clean_data.py terminé pour {clientId}");
