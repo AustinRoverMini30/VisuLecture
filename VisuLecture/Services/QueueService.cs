@@ -1,10 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Drawing.Printing;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
-using Eyeware.BeamEyeTracker;
 using VisuLecture.Components;
 
 public class CalibrationService : BackgroundService
@@ -224,35 +220,6 @@ public class CalibrationService : BackgroundService
             {
                 writer.WriteLine($"{p.timestamp.ToString(CultureInfo.InvariantCulture)},{p.x},{p.y}");
             }
-        }
-    }
-    
-    public void getGazePoints(CancellationToken token)
-    {
-        var viewport = new ViewportGeometry();
-        Console.WriteLine("Viewport 11" + viewport.Point11.Y);
-        var api = new Eyeware.BeamEyeTracker.API("testC#", viewport);
-        var timestamp = -1.0;
-        var cleanFirstElement = true;
-        
-        while (!token.IsCancellationRequested)
-        {
-            var temp = api.GetLatestTrackingStateSet().UserState;
-            if (temp.TimestampInSeconds != -1 && temp.UnifiedScreenGaze.Confidence == TrackingConfidence.High)
-            {
-                if (cleanFirstElement && temp.UnifiedScreenGaze.PointOfRegard.Y < 500)
-                {
-                    cleanFirstElement = false;
-                }
-                if (!cleanFirstElement)
-                {
-                    
-                    //Console.WriteLine(temp.UnifiedScreenGaze.PointOfRegard.X + " " + temp.UnifiedScreenGaze.PointOfRegard.Y);
-                    
-                    gazePoints.Add(new PointGaze(temp.TimestampInSeconds, temp.UnifiedScreenGaze.PointOfRegard.X, temp.UnifiedScreenGaze.PointOfRegard.Y));
-                }
-            }
-            api.WaitForNewTrackingData(ref timestamp, 1000);
         }
     }
     

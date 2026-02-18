@@ -33,7 +33,7 @@
         </div>
     </section>
 
-    <!-- BeamEye Status Section -->
+    <!-- Eyetrax Status Section -->
     <section class="status-section">
         <div class="section-container">
             <div class="status-card">
@@ -1926,7 +1926,6 @@ private async Task AnalyserImage(byte[] imageBytes)
         Students = new List<Student>(Db.Students.AsEnumerable());
         TextRecords = new List<TextRecord>(Db.TextRecords.AsEnumerable());
         Themes = new List<Theme>(Db.Themes.AsEnumerable());
-        bool running = IsProcessRunning("BeamEyeTracker");
         
         // Initialiser calibrationModel selon la valeur chargée depuis le fichier
         calibrationModel = CalibrationService.calibrationModel switch
@@ -1946,7 +1945,7 @@ private async Task AnalyserImage(byte[] imageBytes)
 
     private void OnTimerElapsed(object? sender, ElapsedEventArgs e)
     {
-        bool running = IsProcessRunning("BeamEyeTracker");
+        
     }
     
     bool IsProcessRunning(string name)
@@ -2016,39 +2015,6 @@ private async Task AnalyserImage(byte[] imageBytes)
         catch (Exception ex)
         {
             Console.WriteLine($"Erreur lors du nettoyage des dossiers orphelins : {ex.Message}");
-        }
-    }
-    
-    void StartBeam()
-    {
-        BeamStatus = "Démarrage en cours...";
-        InvokeAsync(StateHasChanged);
-        var psi = new ProcessStartInfo
-        {
-            FileName = "C:\\Program Files\\Eyeware\\BeamEyeTracker\\BeamEyeTracker.exe",
-            Arguments = "",
-            WorkingDirectory = @"C:\Program Files\Eyeware\BeamEyeTracker",
-            UseShellExecute = true // obligatoire si pas de redirection
-        };
-
-        Process.Start(psi);
-    }
-    
-    void RestartBeam()
-    {
-        BeamStatus = "Redémarrage...";
-        InvokeAsync(StateHasChanged);
-        StopBeam();
-        StartBeam();
-    }
-    
-    void StopBeam()
-    {
-        BeamStatus = "Arrêt en cours...";
-        InvokeAsync(StateHasChanged);
-        foreach (var process in  Process.GetProcessesByName("BeamEyeTracker"))
-        {
-            process.Kill();
         }
     }
 
