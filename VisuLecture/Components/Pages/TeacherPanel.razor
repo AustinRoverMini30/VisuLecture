@@ -599,10 +599,17 @@
                         <div class="theme-images-upload">
                             <p class="upload-instructions">
                                 <RadzenIcon Icon="info" style="margin-right: 5px;" />
-                                Importez 5 images PNG pour ce thème (seront numérotées 1.png à 5.png)
+                                Importez 9 images PNG pour ce thème (seront numérotées 1.png à 9.png)
                             </p>
                             
-                            @for (int i = 0; i < 5; i++)
+                            <div class="upload-all-section">
+                                <label class="upload-label">Appliquer une image à toutes les cases</label>
+                                <InputFile OnChange="@OnThemeImageSelectedForAll" 
+                                         accept="image/png" 
+                                         class="file-input" />
+                            </div>
+                            
+                            @for (int i = 0; i < 9; i++)
                             {
                                 int index = i; // Capture de variable pour le lambda
                                 <div class="image-upload-slot">
@@ -656,7 +663,7 @@
                                 <span class="theme-id-badge">ID: @theme.Id</span>
                             </div>
                             <div class="theme-card-images">
-                                @for (int i = 1; i <= 5; i++)
+                                @for (int i = 1; i <= 9; i++)
                                 {
                                     <div class="theme-image-mini">
                                         <img src="@($"/pictures/themes/{theme.FolderName}/{i}.png")" 
@@ -1395,6 +1402,27 @@
         font-size: 0.95rem;
     }
 
+    .upload-all-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        border: 2px solid #5568d3;
+    }
+
+    .upload-all-section .upload-label {
+        color: white;
+        font-weight: 600;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .upload-all-section .file-input {
+        background: white;
+        padding: 0.5rem;
+        border-radius: 4px;
+    }
+
     .image-upload-slot {
         display: flex;
         align-items: center;
@@ -1565,7 +1593,7 @@
     
     // Variables pour les thèmes
     private string newThemeName = "";
-    private byte[][] themeImages = new byte[5][];
+    private byte[][] themeImages = new byte[9][];
     
     bool ContainsId(string id)
     {
@@ -1722,6 +1750,10 @@ private async Task AnalyserImage(byte[] imageBytes)
                 int lineNum = 0;
                 float prevRight = 0;
                 float espace = 0;
+                int prevY = -1;
+                int lineBaseY = -1; // Y de référence pour la ligne courante
+                const int lineThreshold = 50; // Seuil pour détecter un changement de ligne (en pixels)
+                const int sameLineThreshold = 30; // Tolérance pour les variations au sein d'une même ligne
 
                 // Parser le TSV (ignorer la première ligne d'en-tête)
                 for (int i = 1; i < lines.Length; i++)
@@ -1741,12 +1773,17 @@ private async Task AnalyserImage(byte[] imageBytes)
                     int height = int.Parse(parts[9], System.Globalization.CultureInfo.InvariantCulture);
                     float conf = float.Parse(parts[10], System.Globalization.CultureInfo.InvariantCulture);
 
-
-                    int blockNum = int.Parse(parts[2]);
-                    if (blockNum != lineNum)
+                    // Détecter un changement de ligne basé sur un saut significatif de Y
+                    if (prevY < 0)
                     {
-                        lineNum = blockNum;
-                        prevRight = 0;}
+                        lineNum = 1; // Première ligne
+                    }
+                    else if (Math.Abs(y - prevY) > lineThreshold)
+                    {
+                        lineNum++;
+                        prevRight = 0;
+                    }
+                    prevY = y;
 
                     // Nettoyer le mot
                     string motNettoye = new string(mot.Where(c => !symbols.Contains(c.ToString())).ToArray());
@@ -2885,6 +2922,46 @@ private async Task AnalyserImage(byte[] imageBytes)
     // GESTION DES THÈMES
     // ==========================================
     
+    private async Task OnThemeImageSelectedForAll(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file == null) return;
+
+            const long maxSize = 5 * 1024 * 1024; // 5MB
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            var bytes = ms.ToArray();
+
+            // Vérifier que c'est bien un PNG
+            if (!file.ContentType.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Format invalide", 
+                    "Veuillez uploader uniquement des fichiers PNG.");
+                return;
+            }
+
+            // Appliquer l'image à toutes les cases
+            for (int i = 0; i < 9; i++)
+            {
+                themeImages[i] = bytes;
+            }
+            
+            NotificationService.Notify(NotificationSeverity.Success, "Succès", 
+                "L'image a été appliquée à toutes les cases.");
+            
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur upload image pour toutes les cases : " + ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                $"Erreur lors de l'upload : {ex.Message}");
+        }
+    }
+    
     private async Task OnThemeImageSelected(InputFileChangeEventArgs e, int index)
     {
         try
@@ -2919,10 +2996,10 @@ private async Task AnalyserImage(byte[] imageBytes)
 
     private bool CanSaveTheme()
     {
-        // Vérifier que le nom n'est pas vide et que les 5 images sont uploadées
+        // Vérifier que le nom n'est pas vide et que les 9 images sont uploadées
         if (string.IsNullOrWhiteSpace(newThemeName)) return false;
         
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 9; i++)
         {
             if (themeImages[i] == null) return false;
         }
@@ -2935,7 +3012,7 @@ private async Task AnalyserImage(byte[] imageBytes)
         if (!CanSaveTheme())
         {
             NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
-                "Veuillez renseigner le nom du thème et uploader les 5 images PNG.");
+                "Veuillez renseigner le nom du thème et uploader les 9 images PNG.");
             return;
         }
 
@@ -2952,8 +3029,8 @@ private async Task AnalyserImage(byte[] imageBytes)
             string themePath = Path.Combine(Env.WebRootPath, "pictures", "themes", folderName);
             Directory.CreateDirectory(themePath);
             
-            // Enregistrer les 5 images
-            for (int i = 0; i < 5; i++)
+            // Enregistrer les 9 images
+            for (int i = 0; i < 9; i++)
             {
                 string imagePath = Path.Combine(themePath, $"{i + 1}.png");
                 await File.WriteAllBytesAsync(imagePath, themeImages[i]);
@@ -2983,7 +3060,7 @@ private async Task AnalyserImage(byte[] imageBytes)
     private void EraseTheme()
     {
         newThemeName = "";
-        themeImages = new byte[5][];
+        themeImages = new byte[9][];
     }
 
     private async Task DeleteTheme(Theme theme)

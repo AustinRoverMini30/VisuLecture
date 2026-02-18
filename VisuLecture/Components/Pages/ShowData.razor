@@ -86,13 +86,23 @@
                 
                 <div class="controls-content">
                     <div class="control-group">
-                        <RadzenCheckBox @bind-Value=@isRawVisible Change="@UpdateOverlay" TValue="bool" />
-                        <RadzenLabel Text="Données calibrées" class="control-label red-label" />
+                        <RadzenCheckBox @bind-Value=@isCleanedVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Données nettoyées" class="control-label red-label" />
                     </div>
                     
                     <div class="control-group">
-                        <RadzenCheckBox @bind-Value=@isAffineVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenCheckBox @bind-Value=@isRawVisible Change="@UpdateOverlay" TValue="bool" />
                         <RadzenLabel Text="Données brutes" class="control-label green-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isNormalizedVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Données normalisées" class="control-label blue-label" />
+                    </div>
+                    
+                    <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@isSmoothedVisible Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Données lissées" class="control-label teal-label" />
                     </div>
                     
                     <div class="control-group">
@@ -116,6 +126,11 @@
                     </div>
                     
                     <div class="control-group">
+                        <RadzenCheckBox @bind-Value=@hideJumps Change="@UpdateOverlay" TValue="bool" />
+                        <RadzenLabel Text="Cacher les sauts" class="control-label brown-label" />
+                    </div>
+                    
+                    <div class="control-group">
                         <RadzenButton Click="@GoBack" class="btn-back">
                             <RadzenIcon Icon="arrow_back" style="margin-right: 5px;" />
                             Retour
@@ -123,6 +138,63 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Filtre par lignes -->
+            @if (totalLines > 0)
+            {
+                <div class="controls-card">
+                    <div class="controls-header">
+                        <RadzenIcon Icon="format_line_spacing" style="margin-right: 10px; font-size: 1.5rem;" />
+                        <h3 class="controls-title">Filtrer par lignes</h3>
+                    </div>
+                    
+                    <div class="controls-content">
+                        <div class="line-filter-info">
+                            <RadzenIcon Icon="info" style="margin-right: 5px; color: #667eea;" />
+                            <span>Les lignes correspondent aux portions de courbes délimitées par les sauts</span>
+                        </div>
+                        
+                        <div class="line-filter-controls">
+                            <RadzenCheckBox @bind-Value=@filterByLines Change="@UpdateOverlay" TValue="bool" />
+                            <RadzenLabel Text="Activer le filtre par lignes" class="control-label" />
+                        </div>
+                        
+                        @if (filterByLines)
+                        {
+                            <div class="line-selection-container">
+                                <div class="line-selection-header">
+                                    <span class="line-selection-label">Lignes à afficher :</span>
+                                    <div class="line-selection-actions">
+                                        <RadzenButton Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" 
+                                                    Click="@SelectAllLines" class="btn-line-action">
+                                            <RadzenIcon Icon="select_all" style="font-size: 0.9rem;" />
+                                            Tout sélectionner
+                                        </RadzenButton>
+                                        <RadzenButton Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" 
+                                                    Click="@DeselectAllLines" class="btn-line-action">
+                                            <RadzenIcon Icon="clear" style="font-size: 0.9rem;" />
+                                            Tout désélectionner
+                                        </RadzenButton>
+                                    </div>
+                                </div>
+                                
+                                <div class="line-checkboxes">
+                                    @for (int i = 1; i <= totalLines; i++)
+                                    {
+                                        int lineNumber = i; // Capture pour le lambda
+                                        <div class="line-checkbox-item">
+                                            <RadzenCheckBox Value="@selectedLines.Contains(lineNumber)" 
+                                                          TValue="bool"
+                                                          Change="@(value => ToggleLine(lineNumber, value))" />
+                                            <RadzenLabel Text="@($"Ligne {lineNumber}")" class="line-checkbox-label" />
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
         </div>
     </section>
 
@@ -165,15 +237,27 @@
     }
 
     // ------------------- VARIABLES -------------------
-    private List<(double x, double y)> points = new();
     private List<(double x, double y)> pointsRaw = new();
+    private List<(double x, double y)> pointsCleaned = new();
+    private List<(double x, double y)> pointsNormalized = new();
+    private List<(double x, double y)> pointsSmoothed = new();
     private List<List<(double x, double y)>> saccadesGroups = new(); // Liste de groupes de saccades
-    private bool isAffineVisible = false;
+    
+    // Listes de sauts par courbe
+    private List<List<(double x, double y)>> jumpGroupsRaw = new(); // Sauts pour données brutes (cleaned.csv)
+    private List<List<(double x, double y)>> jumpGroupsRawCalibrated = new(); // Sauts pour données calibrées (raw.csv)
+    private List<List<(double x, double y)>> jumpGroupsNormalized = new(); // Sauts pour données normalisées
+    private List<List<(double x, double y)>> jumpGroupsSmoothed = new(); // Sauts pour données lissées
+    
     private bool isRawVisible = false;
+    private bool isCleanedVisible = false;
+    private bool isNormalizedVisible = false;
+    private bool isSmoothedVisible = false;
     private bool isDensityVisible = false;
     private bool isWordBoxVisible = false;
     private bool isThickenLinesEnabled = false;
     private bool isSaccadesVisible = false;
+    private bool hideJumps = false;
     private bool _firstRenderComplete = false;
     [Parameter] public string readingId { get; set; }
     
@@ -194,6 +278,11 @@
     // Variables pour le filtre des mots
     private int selectedWordFilter = 1; // 1 = mots lus uniquement, 2 = tous les mots
     
+    // Variables pour le filtre par lignes
+    private bool filterByLines = false;
+    private HashSet<int> selectedLines = new();
+    private int totalLines = 0;
+    
     private async Task UpdateOverlay()
     {
         await JS.InvokeVoidAsync("clearOverlay");
@@ -211,29 +300,51 @@
         }
         
         // Dessiner les courbes PAR-DESSUS
+        if (isCleanedVisible && pointsCleaned != null && pointsCleaned.Count > 0)
+        {
+            if (isThickenLinesEnabled)
+            {
+                await DrawThickenedLine(pointsCleaned, jumpGroupsRaw, "red", "blue", hideJumps);
+            }
+            else
+            {
+                await DrawCurveWithJumps(pointsCleaned, jumpGroupsRaw, "red", "blue", hideJumps);
+            }
+        }
+        
         if (isRawVisible && pointsRaw != null && pointsRaw.Count > 0)
         {
             if (isThickenLinesEnabled)
             {
-                await DrawThickenedLine(pointsRaw, "red", "blue");
+                await DrawThickenedLine(pointsRaw, jumpGroupsRawCalibrated, "green", "yellow", hideJumps);
             }
             else
             {
-                var jsPointsRaw = pointsRaw.Select(p => new { x = p.x, y = p.y }).ToList();
-                await JS.InvokeVoidAsync("drawFollowLine", jsPointsRaw, "red", "blue");
+                await DrawCurveWithJumps(pointsRaw, jumpGroupsRawCalibrated, "green", "yellow", hideJumps);
             }
         }
         
-        if (isAffineVisible && points != null && points.Count > 0)
+        if (isNormalizedVisible && pointsNormalized != null && pointsNormalized.Count > 0)
         {
             if (isThickenLinesEnabled)
             {
-                await DrawThickenedLine(points, "green", "yellow");
+                await DrawThickenedLine(pointsNormalized, jumpGroupsNormalized, "#007bff", "#0056b3", hideJumps);
             }
             else
             {
-                var jsPoints = points.Select(p => new { x = p.x, y = p.y }).ToList();
-                await JS.InvokeVoidAsync("drawFollowLine", jsPoints, "green", "yellow");
+                await DrawCurveWithJumps(pointsNormalized, jumpGroupsNormalized, "#007bff", "#0056b3", hideJumps);
+            }
+        }
+        
+        if (isSmoothedVisible && pointsSmoothed != null && pointsSmoothed.Count > 0)
+        {
+            if (isThickenLinesEnabled)
+            {
+                await DrawThickenedLine(pointsSmoothed, jumpGroupsSmoothed, "#20c997", "#17a2b8", hideJumps);
+            }
+            else
+            {
+                await DrawCurveWithJumps(pointsSmoothed, jumpGroupsSmoothed, "#20c997", "#17a2b8", hideJumps);
             }
         }
         
@@ -317,39 +428,18 @@
             return;
         }
 
-        var csv = await File.ReadAllLinesAsync(csvPath);
-
-        points.Clear();
-
-        foreach (var raw in csv.Skip(1)) // skip header
-        {
-            var line = raw?.Trim();
-            if (string.IsNullOrEmpty(line))
-                continue;
-
-            var parts = line.Split(',');
-            if (parts.Length < 3)
-                continue;
-
-            // index,x,y  -> x = parts[1], y = parts[2]
-            if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
-                double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
-            {
-                points.Add((x, y));
-            }
-            else
-            {
-                // Optionnel : log / notify pour les lignes malformées
-                Console.WriteLine($"Ligne CSV ignorée (parse failed): {line}");
-            }
-        }
+        // Charger les données calibrées (raw.csv) avec les sauts
+        await LoadPointsAndJumps(csvPath, pointsRaw, jumpGroupsRawCalibrated);
         
-        csv = await File.ReadAllLinesAsync(csvRaw);
+        // Charger les données brutes (cleaned.csv) avec les sauts et saccades
+        var csv = await File.ReadAllLinesAsync(csvRaw);
 
-        pointsRaw.Clear();
+        pointsCleaned.Clear();
         saccadesGroups.Clear();
+        jumpGroupsRaw.Clear();
         
         List<(double x, double y)> currentSaccadeGroup = null;
+        List<(double x, double y)> currentJumpGroup = null;
 
         foreach (var raw in csv.Skip(1)) // skip header
         {
@@ -361,11 +451,20 @@
             if (parts.Length < 3)
                 continue;
 
-            // timestamp,x,y,jump,saccade -> x = parts[1], y = parts[2], saccade = parts[4]
+            // timestamp,x,y,jump,saccade -> x = parts[1], y = parts[2], jump = parts[3], saccade = parts[4]
             if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
                 double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
             {
-                pointsRaw.Add((x, y));
+                pointsCleaned.Add((x, y));
+                
+                // Vérifier si c'est un saut (colonne 3, index 3)
+                bool isJump = false;
+                if (parts.Length >= 4 && 
+                    double.TryParse(parts[3].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var jump) &&
+                    jump > 0)
+                {
+                    isJump = true;
+                }
                 
                 // Vérifier si c'est une saccade (colonne 4, index 4)
                 bool isSaccade = false;
@@ -374,6 +473,22 @@
                     saccade > 0)
                 {
                     isSaccade = true;
+                }
+                
+                if (isJump)
+                {
+                    // Si pas de groupe en cours, en créer un nouveau
+                    if (currentJumpGroup == null)
+                    {
+                        currentJumpGroup = new List<(double x, double y)>();
+                        jumpGroupsRaw.Add(currentJumpGroup);
+                    }
+                    currentJumpGroup.Add((x, y));
+                }
+                else
+                {
+                    // Fin du groupe de sauts
+                    currentJumpGroup = null;
                 }
                 
                 if (isSaccade)
@@ -399,8 +514,83 @@
             }
         }
         
+        // Charger les données calibrées (raw.csv) avec les sauts
+        var csvRawCalibrated = "records/" + readingId + "/raw.csv";
+        if (File.Exists(csvRawCalibrated))
+        {
+            await LoadPointsAndJumps(csvRawCalibrated, pointsRaw, jumpGroupsRawCalibrated);
+        }
+        
+        // Charger les données normalisées si disponibles
+        var csvNormalized = "records/" + readingId + "/normalized.csv";
+        if (File.Exists(csvNormalized))
+        {
+            await LoadPointsAndJumps(csvNormalized, pointsNormalized, jumpGroupsNormalized);
+        }
+        
+        // Charger les données lissées si disponibles
+        var csvSmoothed = "records/" + readingId + "/smoothed.csv";
+        if (File.Exists(csvSmoothed))
+        {
+            await LoadPointsAndJumps(csvSmoothed, pointsSmoothed, jumpGroupsSmoothed);
+        }
+        
         // Effectuer l'analyse des mots
         await AnalyseFichiers();
+        
+        // Calculer le nombre total de lignes
+        CalculateTotalLines();
+    }
+    
+    // ------------------- HELPER POUR CHARGER POINTS ET SAUTS -------------------
+    private async Task LoadPointsAndJumps(string csvPath, List<(double x, double y)> pointsList, List<List<(double x, double y)>> jumpGroupsList)
+    {
+        pointsList.Clear();
+        jumpGroupsList.Clear();
+        
+        var csv = await File.ReadAllLinesAsync(csvPath);
+        List<(double x, double y)> currentJumpGroup = null;
+        
+        foreach (var raw in csv.Skip(1)) // skip header
+        {
+            var line = raw?.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            
+            var parts = line.Split(',');
+            if (parts.Length < 3) continue;
+            
+            // timestamp,x,y,jump,saccade (ou juste timestamp,x,y pour certains fichiers)
+            if (double.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var x) &&
+                double.TryParse(parts[2].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var y))
+            {
+                pointsList.Add((x, y));
+                
+                // Vérifier si c'est un saut (colonne 3, index 3)
+                bool isJump = false;
+                if (parts.Length >= 4 && 
+                    double.TryParse(parts[3].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var jump) &&
+                    jump > 0)
+                {
+                    isJump = true;
+                }
+                
+                if (isJump)
+                {
+                    // Si pas de groupe en cours, en créer un nouveau
+                    if (currentJumpGroup == null)
+                    {
+                        currentJumpGroup = new List<(double x, double y)>();
+                        jumpGroupsList.Add(currentJumpGroup);
+                    }
+                    currentJumpGroup.Add((x, y));
+                }
+                else
+                {
+                    // Fin du groupe de sauts
+                    currentJumpGroup = null;
+                }
+            }
+        }
     }
     
     // ------------------- ANALYSE -------------------
@@ -409,7 +599,7 @@
         if (textRecord == null) return;
         
         string pathMots = Path.Combine(Env.WebRootPath, textRecord.FilePath, "resultats_ocr.csv");
-        string pathPoints = Path.Combine(Env.ContentRootPath, "records", readingId, "cleaned.csv");
+        string pathPoints = Path.Combine(Env.ContentRootPath, "records", readingId, "normalized.csv");
 
         // Vérifier que les fichiers existent
         if (!File.Exists(pathMots))
@@ -562,15 +752,148 @@
         }
     }
     
-    private async Task DrawThickenedLine(List<(double x, double y)> pointsList, string lineColor, string pointColor)
+    private async Task DrawCurveWithJumps(List<(double x, double y)> pointsList, List<List<(double x, double y)>> jumpGroups, string lineColor, string pointColor, bool hideJumps)
     {
         if (pointsList.Count < 2) return;
+        
+        // Créer un set des indices de points qui sont des sauts
+        var jumpIndices = new HashSet<int>();
+        foreach (var group in jumpGroups)
+        {
+            foreach (var jumpPoint in group)
+            {
+                // Trouver l'index de ce point dans pointsList
+                for (int i = 0; i < pointsList.Count; i++)
+                {
+                    if (Math.Abs(pointsList[i].x - jumpPoint.x) < 0.01 && 
+                        Math.Abs(pointsList[i].y - jumpPoint.y) < 0.01)
+                    {
+                        jumpIndices.Add(i);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Appliquer le filtre par lignes si activé
+        HashSet<int> lineFilteredIndices = null;
+        bool hasLineFilter = filterByLines && selectedLines.Count > 0 && selectedLines.Count < totalLines;
+        
+        if (hasLineFilter)
+        {
+            lineFilteredIndices = GetLineIndicesForPoints(pointsList, jumpGroups);
+        }
+        
+        if (!hideJumps && !hasLineFilter)
+        {
+            // Mode normal sans filtre par lignes : afficher toute la courbe avec les sauts en bleu
+            var jsPoints = pointsList.Select(p => new { x = p.x, y = p.y }).ToList();
+            await JS.InvokeVoidAsync("drawFollowLine", jsPoints, lineColor, pointColor);
+            
+            // Dessiner les sauts en bleu par-dessus
+            foreach (var group in jumpGroups)
+            {
+                if (group.Count > 0)
+                {
+                    var jsJumps = group.Select(p => new { x = p.x, y = p.y }).ToList();
+                    await JS.InvokeVoidAsync("drawFollowLine", jsJumps, "blue", "blue");
+                }
+            }
+        }
+        else
+        {
+            // Mode hideJumps OU filtre par lignes actif : afficher les courbes comme segments indépendants
+            // Séparer les segments non-jump et filtrés par lignes
+            var segments = new List<List<(double x, double y)>>();
+            var currentSegment = new List<(double x, double y)>();
+            
+            for (int i = 0; i < pointsList.Count; i++)
+            {
+                bool isFiltered = lineFilteredIndices != null && !lineFilteredIndices.Contains(i);
+                bool isJump = jumpIndices.Contains(i);
+                
+                // Point valide si : pas un saut (ou hideJumps pas activé) ET pas filtré par ligne
+                bool isValidPoint = !isFiltered && (!hideJumps || !isJump);
+                
+                if (isValidPoint)
+                {
+                    currentSegment.Add(pointsList[i]);
+                }
+                else
+                {
+                    if (currentSegment.Count > 0)
+                    {
+                        segments.Add(new List<(double x, double y)>(currentSegment));
+                        currentSegment.Clear();
+                    }
+                }
+            }
+            
+            if (currentSegment.Count > 0)
+            {
+                segments.Add(currentSegment);
+            }
+            
+            // Dessiner chaque segment indépendamment
+            foreach (var segment in segments)
+            {
+                if (segment.Count > 1)
+                {
+                    var jsSegment = segment.Select(p => new { x = p.x, y = p.y }).ToList();
+                    await JS.InvokeVoidAsync("drawFollowLine", jsSegment, lineColor, pointColor);
+                }
+            }
+        }
+    }
+    
+    private async Task DrawThickenedLine(List<(double x, double y)> pointsList, List<List<(double x, double y)>> jumpGroups, string lineColor, string pointColor, bool hideJumps)
+    {
+        if (pointsList.Count < 2) return;
+        
+        // Créer un set des indices de points qui sont des sauts
+        var jumpIndices = new HashSet<int>();
+        foreach (var group in jumpGroups)
+        {
+            foreach (var jumpPoint in group)
+            {
+                // Trouver l'index de ce point dans pointsList
+                for (int i = 0; i < pointsList.Count; i++)
+                {
+                    if (Math.Abs(pointsList[i].x - jumpPoint.x) < 0.01 && 
+                        Math.Abs(pointsList[i].y - jumpPoint.y) < 0.01)
+                    {
+                        jumpIndices.Add(i);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Appliquer le filtre par lignes si activé
+        HashSet<int> lineFilteredIndices = null;
+        bool hasLineFilter = filterByLines && selectedLines.Count > 0 && selectedLines.Count < totalLines;
+        
+        if (hasLineFilter)
+        {
+            lineFilteredIndices = GetLineIndicesForPoints(pointsList, jumpGroups);
+        }
         
         // Calculer les distances entre points consécutifs et créer les segments
         var segments = new List<object>();
         
         for (int i = 0; i < pointsList.Count - 1; i++)
         {
+            // Vérifier si filtré par lignes
+            bool isFiltered = lineFilteredIndices != null && 
+                             !lineFilteredIndices.Contains(i) && 
+                             !lineFilteredIndices.Contains(i + 1);
+            
+            bool isJump = jumpIndices.Contains(i) || jumpIndices.Contains(i + 1);
+            
+            // Skip si : filtré par lignes OU (hideJumps activé ET c'est un saut)
+            if (isFiltered || (hideJumps && isJump))
+                continue;
+            
             var p1 = pointsList[i];
             var p2 = pointsList[i + 1];
             
@@ -578,20 +901,21 @@
             double distance = Math.Sqrt(Math.Pow(p2.x - p1.x, 2) + Math.Pow(p2.y - p1.y, 2));
             
             // Calculer l'épaisseur en fonction de la distance
-            // Distance faible = trait épais (fixation longue)
-            // Distance élevée = trait fin (mouvement rapide)
             double lineWidth;
             
             if (distance < 10)
-                lineWidth = 50;  // Très épais - très peu de mouvement
+                lineWidth = 50;
             else if (distance < 30)
-                lineWidth = 30;  // Épais - mouvement lent
+                lineWidth = 30;
             else if (distance < 70)
-                lineWidth = 10;  // Moyen - mouvement normal
+                lineWidth = 10;
             else if (distance < 150)
-                lineWidth = 5;  // Fin - mouvement rapide
+                lineWidth = 5;
             else
-                lineWidth = 1;  // Très fin - saccade ou saut
+                lineWidth = 1;
+            
+            // Si ce n'est pas un saut, utiliser la couleur normale, sinon bleu (seulement si hideJumps pas activé et pas de filtre par lignes actif)
+            string segmentColor = (!hideJumps && !hasLineFilter && isJump) ? "blue" : lineColor;
             
             segments.Add(new
             {
@@ -599,18 +923,152 @@
                 y1 = p1.y,
                 x2 = p2.x,
                 y2 = p2.y,
-                width = lineWidth
+                width = lineWidth,
+                color = segmentColor
             });
         }
         
         // Dessiner les segments avec épaisseur variable
-        await JS.InvokeVoidAsync("drawThickenedLine", segments, lineColor);
+        await JS.InvokeVoidAsync("drawThickenedLineWithColors", segments);
         
-        // Dessiner les points par-dessus
-        var jsPoints = pointsList.Select(p => new { x = p.x, y = p.y }).ToList();
-        foreach (var point in jsPoints)
+        // Dessiner les points par-dessus (sauf les sauts si hideJumps et sauf les points filtrés par lignes)
+        for (int i = 0; i < pointsList.Count; i++)
         {
-            await JS.InvokeVoidAsync("drawPoint", point.x, point.y, pointColor, 4);
+            bool isFiltered = lineFilteredIndices != null && !lineFilteredIndices.Contains(i);
+            bool isJump = jumpIndices.Contains(i);
+            
+            // Skip si : filtré par lignes OU (hideJumps activé ET c'est un saut)
+            if (isFiltered || (hideJumps && isJump))
+                continue;
+            
+            var point = pointsList[i];
+            string color = (!hideJumps && !hasLineFilter && isJump) ? "blue" : pointColor;
+            await JS.InvokeVoidAsync("drawPoint", point.x, point.y, color, 4);
+        }
+    }
+    
+    // ------------------- MÉTHODES UTILITAIRES POUR LE TABLEAU -------------------
+    
+    // ------------------- MÉTHODES POUR LE FILTRE PAR LIGNES -------------------
+    
+    private HashSet<int> GetLineIndicesForPoints(List<(double x, double y)> pointsList, List<List<(double x, double y)>> jumpGroups)
+    {
+        // Créer une map point index -> numéro de ligne
+        var pointLineMap = new Dictionary<int, int>();
+        
+        // Créer un set des indices de sauts
+        var jumpIndices = new HashSet<int>();
+        foreach (var group in jumpGroups)
+        {
+            foreach (var jumpPoint in group)
+            {
+                for (int i = 0; i < pointsList.Count; i++)
+                {
+                    if (Math.Abs(pointsList[i].x - jumpPoint.x) < 0.01 && 
+                        Math.Abs(pointsList[i].y - jumpPoint.y) < 0.01)
+                    {
+                        jumpIndices.Add(i);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Assigner les numéros de ligne
+        int currentLine = 1;
+        for (int i = 0; i < pointsList.Count; i++)
+        {
+            if (!jumpIndices.Contains(i))
+            {
+                pointLineMap[i] = currentLine;
+            }
+            else
+            {
+                // Point de saut - passe à la ligne suivante après ce groupe
+                if (i > 0 && !jumpIndices.Contains(i - 1))
+                {
+                    currentLine++;
+                }
+            }
+        }
+        
+        // Retourner les indices des points qui appartiennent aux lignes sélectionnées
+        var result = new HashSet<int>();
+        foreach (var kvp in pointLineMap)
+        {
+            if (selectedLines.Contains(kvp.Value))
+            {
+                result.Add(kvp.Key);
+            }
+        }
+        
+        return result;
+    }
+    
+    private void ToggleLine(int lineNumber, bool isChecked)
+    {
+        if (isChecked)
+        {
+            selectedLines.Add(lineNumber);
+        }
+        else
+        {
+            selectedLines.Remove(lineNumber);
+        }
+        
+        UpdateOverlay();
+    }
+    
+    private void SelectAllLines()
+    {
+        selectedLines.Clear();
+        for (int i = 1; i <= totalLines; i++)
+        {
+            selectedLines.Add(i);
+        }
+        
+        UpdateOverlay();
+    }
+    
+    private void DeselectAllLines()
+    {
+        selectedLines.Clear();
+        UpdateOverlay();
+    }
+    
+    private void CalculateTotalLines()
+    {
+        // Le nombre de lignes est déterminé par les sauts dans cleaned.csv
+        // Une ligne = portion entre deux sauts consécutifs
+        totalLines = 0;
+        
+        if (jumpGroupsRaw != null && jumpGroupsRaw.Count > 0)
+        {
+            // Nombre de lignes = nombre de groupes de sauts + 1
+            // (car il y a une ligne avant le premier saut, entre chaque groupe, et après le dernier)
+            totalLines = jumpGroupsRaw.Count + 1;
+        }
+        else if (pointsCleaned != null && pointsCleaned.Count > 0)
+        {
+            // Si pas de sauts, considérer qu'il y a une seule ligne
+            totalLines = 1;
+        }
+        
+        // Alternativement, utiliser le nombre de lignes depuis resultats_ocr
+        if (resultats != null && resultats.Count > 0)
+        {
+            var maxLigne = resultats.Max(r => r.ligne);
+            if (maxLigne > totalLines)
+            {
+                totalLines = maxLigne;
+            }
+        }
+        
+        // Initialiser toutes les lignes comme sélectionnées par défaut
+        selectedLines.Clear();
+        for (int i = 1; i <= totalLines; i++)
+        {
+            selectedLines.Add(i);
         }
     }
     
@@ -922,6 +1380,14 @@
     .red-label {
         color: #dc3545 !important;
     }
+    
+    .blue-label {
+        color: #007bff !important;
+    }
+    
+    .teal-label {
+        color: #20c997 !important;
+    }
 
     .purple-label {
         color: #9b59b6 !important;
@@ -937,6 +1403,100 @@
 
     .magenta-label {
         color: #ff00ff !important;
+    }
+    
+    .brown-label {
+        color: #8b4513 !important;
+    }
+
+    /* Line Filter Styles */
+    .line-filter-info {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        background: #f0f4ff;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        width: 100%;
+        font-size: 0.95rem;
+        color: #495057;
+    }
+
+    .line-filter-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .line-selection-container {
+        width: 100%;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+    }
+
+    .line-selection-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .line-selection-label {
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #495057;
+    }
+
+    .line-selection-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-line-action {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .btn-line-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .line-checkboxes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .line-checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        border: 1px solid #dee2e6;
+    }
+
+    .line-checkbox-item:hover {
+        background: #e7f3ff;
+        border-color: #667eea;
+    }
+
+    .line-checkbox-label {
+        font-size: 0.95rem;
+        color: #495057;
+        margin: 0 !important;
     }
 
     .btn-back {

@@ -1,6 +1,9 @@
 @inject DialogService DialogService
+@using VisuLecture.Components.Controller
 @using VisuLecture.Components.Model
+@using Theme = VisuLecture.Components.Model.Theme
 @rendermode InteractiveServer
+@inject AppDbContext Db
 
 <div class="student-modifier-container">
     <div class="modifier-header">
@@ -63,17 +66,18 @@
             </RadzenFormField>
 
             <!-- Theme -->
-            <RadzenFormField Text="Thème préféré" Variant="@variant">
+            <RadzenFormField Text="Thème préféré">
                 <ChildContent>
-                    <RadzenRadioButtonList Name="Theme" @bind-Value=@editedStudent.Theme TValue="int">
-                        <Items>
-                            <RadzenRadioButtonListItem Text="Défaut" Value="1"/>
-                            <RadzenRadioButtonListItem Text="Planète" Value="2"/>
-                        </Items>
-                    </RadzenRadioButtonList>
+                    <RadzenDropDown Name="Theme" 
+                                    @bind-Value=@editedStudent.Theme 
+                                    Data=@GetThemeOptions()
+                                    TextProperty="Text"
+                                    ValueProperty="Value"
+                                    TValue="int"
+                                    class="form-input" />
                 </ChildContent>
                 <Helper>
-                    <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire."/>
+                    <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire." />
                 </Helper>
             </RadzenFormField>
 
@@ -82,9 +86,6 @@
                 <ChildContent>
                     <RadzenTextArea Name="Remarque" @bind-Value=@editedStudent.Remarque Rows="3" class="form-textarea"/>
                 </ChildContent>
-                <Helper>
-                    <RadzenRequiredValidator Component="Remarque" Text="Champ obligatoire."/>
-                </Helper>
             </RadzenFormField>
 
             <!-- Submit Buttons -->
@@ -156,9 +157,13 @@
     
     Variant variant = Variant.Outlined;
     
+    private List<Theme> Themes;
+    
     protected override void OnInitialized()
     {
         base.OnInitialized();
+        
+        Themes = new List<Theme>(Db.Themes.AsEnumerable());
 
         editedStudent = new Student(Student.Id, Student.FirstName, Student.LastName, Student.Age, Student.Lunette, Student.Theme, Student.Remarque);
     }
@@ -167,5 +172,21 @@
     {
         Student.UpdateFrom(stu);
         DialogService.Close(stu);
+    }
+    
+    private List<dynamic> GetThemeOptions()
+    {
+        var options = new List<dynamic>
+        {
+            new { Text = "Défaut (ronds blancs)", Value = 0 }
+        };
+        
+        // Ajouter les thèmes depuis la base de données
+        foreach (var theme in Themes.OrderBy(t => t.Id))
+        {
+            options.Add(new { Text = theme.Name, Value = theme.Id });
+        }
+        
+        return options;
     }
 }

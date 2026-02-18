@@ -6,6 +6,7 @@ import math
 import cv2
 import numpy as np
 import pandas as pd
+from scipy.signal import savgol_filter
 
 class Point:
     def __init__(self, timestamp, x, y, jump=False, saccade=False):
@@ -102,9 +103,11 @@ def write_points(points, out_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--points", help="csv points path", default=None)
-    parser.add_argument("-w", "--words", help="csv words path", default=None)
-    parser.add_argument("-o", "--output", help="output csv path", default="points_cleaned.csv")
+    parser.add_argument("--points", help="csv points path", default=None)
+    parser.add_argument("--words", help="csv words path", default=None)
+    parser.add_argument("--cleaned", help="output csv path", default="points_cleaned.csv")
+    parser.add_argument("--normalized", help="output csv path", default="points_normalized.csv")
+    parser.add_argument("--smoothed", help="output csv path", default="points_smooth.csv")
     args = parser.parse_args()
 
     corrected = cleanData(args.points, args.words)  # recalibrage homographie
@@ -113,7 +116,14 @@ def main():
 
     corrected = getJumps(corrected, 1920, 1080, nbLines=len(line_ys), lines=line_ys)
 
-    write_points(corrected, args.output)
+    write_points(corrected, args.cleaned)
+    
+    normalized = normalize_points_to_lines(corrected, line_ys)
+    write_points(normalized, args.normalized)
+    
+    for i in range(100):
+        corrected = apply_savitzky_golay(corrected, window_length=11, polyorder=3, axis='y', include_jumps=False)
+    write_points(corrected, args.smoothed)
 
 def getLinesList(words_df):
     return list(words_df.groupby("ligne")["y"].mean().round().astype(int).reset_index()["y"])
@@ -332,7 +342,7 @@ def getJumps(points, width, height, nbLines, lines, max_iterations=15, fps=30):
     # Détecter et appliquer les saccades
     detectSaccades(returned_points)
 
-    return normalize_points_to_lines(returned_points, lines)
+    return returned_points
 
 def detectSaccades(points):
     max_speed = 900
@@ -377,6 +387,111 @@ def average_speed(nextPoints, fps=30):
     mean_dist_per_frame = sum(distances) / len(distances)
     mean_speed_per_second = mean_dist_per_frame * fps
     return mean_speed_per_second
+
+
+def apply_savitzky_golay(points, window_length=11, polyorder=3, axis='both', include_jumps=False):
+    """
+    Applique le filtre Savitzky-Golay aux coordonnées des points.
+    
+    Args:
+        points: Liste de Point à traiter
+        window_length: Longueur de la fenêtre de filtrage (doit être impair)
+        polyorder: Ordre du polynôme pour le lissage
+        axis: 'x', 'y' ou 'both' - détermine quelles coordonnées lisser
+        include_jumps: Si False, ne lisse pas les points marqués comme sauts
+        
+    Returns:
+        Liste de Point avec coordonnées lissées
+    """
+    if not points or len(points) < window_length:
+        return points
+    
+    # Ajuster window_length si nécessaire (doit être impair et <= len(points))
+    if window_length % 2 == 0:
+        window_length += 1
+    window_length = min(window_length, len(points))
+    if window_length < polyorder + 2:
+        window_length = polyorder + 2
+        if window_length % 2 == 0:
+            window_length += 1
+    
+    # Extraire les coordonnées
+    x_coords = [p.x for p in points]
+    y_coords = [p.y for p in points]
+    
+    # Appliquer le filtre selon l'axe choisi
+    if axis in ['x', 'both']:
+        if include_jumps:
+            x_smoothed = savgol_filter(x_coords, window_length, polyorder)
+        else:
+            # Lisser seulement les segments sans sauts
+            x_smoothed = list(x_coords)  # Copie
+            segments = []
+            current_segment = []
+            
+            for i, p in enumerate(points):
+                if not p.jump:
+                    current_segment.append(i)
+                else:
+                    if len(current_segment) >= window_length:
+                        segments.append(current_segment)
+                    current_segment = []
+            
+            if len(current_segment) >= window_length:
+                segments.append(current_segment)
+            
+            # Appliquer le filtre sur chaque segment
+            for segment in segments:
+                segment_x = [x_coords[i] for i in segment]
+                segment_smoothed = savgol_filter(segment_x, window_length, polyorder)
+                for i, idx in enumerate(segment):
+                    x_smoothed[idx] = segment_smoothed[i]
+    else:
+        x_smoothed = x_coords
+    
+    if axis in ['y', 'both']:
+        if include_jumps:
+            y_smoothed = savgol_filter(y_coords, window_length, polyorder)
+        else:
+            # Lisser seulement les segments sans sauts
+            y_smoothed = list(y_coords)  # Copie
+            segments = []
+            current_segment = []
+            
+            for i, p in enumerate(points):
+                if not p.jump:
+                    current_segment.append(i)
+                else:
+                    if len(current_segment) >= window_length:
+                        segments.append(current_segment)
+                    current_segment = []
+            
+            if len(current_segment) >= window_length:
+                segments.append(current_segment)
+            
+            # Appliquer le filtre sur chaque segment
+            for segment in segments:
+                segment_y = [y_coords[i] for i in segment]
+                segment_smoothed = savgol_filter(segment_y, window_length, polyorder)
+                for i, idx in enumerate(segment):
+                    y_smoothed[idx] = segment_smoothed[i]
+    else:
+        y_smoothed = y_coords
+    
+    # Créer la liste de points lissés
+    smoothed_points = []
+    for i, p in enumerate(points):
+        smoothed_points.append(
+            Point(
+                timestamp=p.timestamp,
+                x=int(round(x_smoothed[i])),
+                y=int(round(y_smoothed[i])),
+                jump=p.jump,
+                saccade=getattr(p, 'saccade', False)
+            )
+        )
+    
+    return smoothed_points
 
 
 if __name__ == "__main__":

@@ -1303,6 +1303,12 @@
         public int width { get; set; }
         public int height { get; set; }
     }
+    
+    public class VideoDimensions
+    {
+        public int width { get; set; }
+        public int height { get; set; }
+    }
 
 
     private async Task CalibrateServer()
@@ -1525,6 +1531,36 @@
     async Task startRecording2()
     {
         await JS.InvokeVoidAsync("startRecording", null, readingId);
+        
+        // Récupérer les dimensions vidéo réelles après le démarrage de l'enregistrement
+        await Task.Delay(500); // Attendre que le stream soit bien établi
+        await UpdateVideoDimensions();
+    }
+    
+    async Task UpdateVideoDimensions()
+    {
+        try
+        {
+            var dimensions = await JS.InvokeAsync<VideoDimensions>("getVideoDimensions");
+            
+            if (dimensions.width > 0 && dimensions.height > 0)
+            {
+                // Mettre à jour la Reading dans la base de données
+                var reading = await Db.Readings.FindAsync(readingId);
+                if (reading != null)
+                {
+                    reading.VideoWidth = dimensions.width;
+                    reading.VideoHeight = dimensions.height;
+                    await Db.SaveChangesAsync();
+                    
+                    Console.WriteLine($"Dimensions vidéo enregistrées: {dimensions.width}x{dimensions.height}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de la récupération des dimensions vidéo: {ex.Message}");
+        }
     }
 
     async Task SwitchRecording2()
@@ -1725,8 +1761,8 @@
         }
 
         // Sélectionner une image en fonction de la position actuelle
-        // Les images sont numérotées de 1 à 5
-        int imageIndex = (currentPosition % 5) + 1; // 1, 2, 3, 4, ou 5
+        // Les images sont numérotées de 1 à 9
+        int imageIndex = (currentPosition % 9) + 1;
 
         return $"/pictures/themes/{themeName}/{imageIndex}.png";
     }

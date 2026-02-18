@@ -225,3 +225,47 @@ window.drawSaccadeGroup = (points) => {
     ctx.fill();
 };
 
+// Dessine un point unique
+window.drawPoint = (x, y, color, radius = 4) => {
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
+
+    // Ajuster les coordonnées
+    const px = x * scaleX;
+    const py = y * scaleY;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fill();
+};
+
+// Dessine une ligne épaissie avec des couleurs par segment
+window.drawThickenedLineWithColors = (segments) => {
+    const canvasInfo = window.initializeCanvas();
+    if (!canvasInfo) return;
+    
+    const { ctx, scaleX, scaleY } = canvasInfo;
+
+    segments.forEach(seg => {
+        const x1 = seg.x1 * scaleX;
+        const y1 = seg.y1 * scaleY;
+        const x2 = seg.x2 * scaleX;
+        const y2 = seg.y2 * scaleY;
+        const width = seg.width * Math.min(scaleX, scaleY);
+        const color = seg.color || 'red';
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    });
+};
+

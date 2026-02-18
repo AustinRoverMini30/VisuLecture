@@ -1,11 +1,15 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using Microsoft.EntityFrameworkCore;
 using VisuLecture.Components;
+using VisuLecture.Components.Controller;
+using VisuLecture.Components.Model;
 
 public class CalibrationService : BackgroundService
 {
     private readonly ILogger<CalibrationService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
     private const string ConfigFilePath = "calibration_config.txt";
     
     public string clientId = "";
@@ -19,9 +23,10 @@ public class CalibrationService : BackgroundService
     
     public string calibrationModel = "none";
     
-    public CalibrationService(ILogger<CalibrationService> logger)
+    public CalibrationService(ILogger<CalibrationService> logger, IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
+        _scopeFactory = scopeFactory;
         _logger.LogInformation("CalibrationService constructor called");
         
         // Charger le modèle de calibration depuis le fichier
@@ -119,6 +124,30 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"HandleActionAsync started for clientId: {clientId}");
         Console.WriteLine($"HandleActionAsync: Started processing for {clientId}");
         
+        // Récupérer les dimensions depuis la base de données
+        int screenWidth = 1920;
+        int screenHeight = 1080;
+        
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var reading = await db.Readings.FirstOrDefaultAsync(r => r.Id == clientId);
+            
+            if (reading != null)
+            {
+                screenWidth = reading.ScreenWidth > 0 ? reading.ScreenWidth : 1920;
+                screenHeight = reading.ScreenHeight > 0 ? reading.ScreenHeight : 1080;
+                
+                Console.WriteLine($"Dimensions d'écran récupérées: {screenWidth}x{screenHeight}");
+                _logger.LogInformation($"Screen dimensions: {screenWidth}x{screenHeight}");
+            }
+            else
+            {
+                Console.WriteLine($"Reading non trouvée pour {clientId}, utilisation des dimensions par défaut");
+                _logger.LogWarning($"Reading not found for {clientId}, using default dimensions");
+            }
+        }
+        
         string pythonExe = "python3.11";
         string videoPrefix = $@"uploads/{clientId}/video"; // Préfixe pour video0.webm, video1.webm, etc.
         string calibScriptPath = @"Calibrate.py";
@@ -126,7 +155,9 @@ public class CalibrationService : BackgroundService
         string cleanDataScriptPath = @"clean_data.py";
         string pointsCsv = "records/" + clientId + "/raw.csv";
         string wordsCsv = "wwwroot/"+textRecordFilePath+"/resultats_ocr.csv";
-        string outputCsv = "records/" + clientId + "/cleaned.csv";
+        string outputCleanedCsv = "records/" + clientId + "/cleaned.csv";
+        string outputNormalizedCsv = "records/" + clientId + "/normalized.csv";
+        string outputSmoothedCsv = "records/" + clientId + "/smoothed.csv";
         
         // Exécuter le script de calibration Python avec le préfixe des vidéos
         Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
@@ -139,7 +170,7 @@ public class CalibrationService : BackgroundService
             StartInfo = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width 1920 --height 1080 --model {calibrationModel}",
+                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width {screenWidth} --height {screenHeight} --model {calibrationModel}",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
@@ -175,7 +206,7 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"Starting Reading.py for {clientId}");
         
         string videoPath = $@"uploads/{clientId}/reading.webm";
-        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width 1920 --height 1080 --model {calibrationModel}").WaitForExitAsync();
+        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width {screenWidth} --height {screenHeight} --model {calibrationModel}").WaitForExitAsync();
         
         Console.WriteLine($"Reading.py terminé pour {clientId}");
         _logger.LogInformation($"Reading.py finished for {clientId}");
@@ -186,7 +217,8 @@ public class CalibrationService : BackgroundService
         
         await Process.Start(
             pythonExe,
-            $"\"{cleanDataScriptPath}\" -p \"{pointsCsv}\" -w \"{wordsCsv}\" -o \"{outputCsv}\""
+            $"\"{cleanDataScriptPath}\" --points \"{pointsCsv}\" --words \"{wordsCsv}\" --cleaned \"{outputCleanedCsv}\" " +
+            $"--normalized \"{outputNormalizedCsv}\" --smoothed \"{outputSmoothedCsv}\""
         ).WaitForExitAsync();
 
         Console.WriteLine($"clean_data.py terminé pour {clientId}");
