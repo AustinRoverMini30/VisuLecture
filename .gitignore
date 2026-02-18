@@ -16,8 +16,8 @@
 *.userprefs
 **/Properties/launchSettings.json
 
-./VisuLecture/records/
-./VisuLecture/uploads/
-./VisuLecture/wwwroot/textImg/
-./VisuLecture/app.db
-./VisuLecture/gaze_model.pkl
+./VisuLecture/records/*
+./VisuLecture/uploads/*
+./VisuLecture/wwwroot/textImg/*
+*.db
+*.pkl
