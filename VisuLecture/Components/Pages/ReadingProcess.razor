@@ -250,44 +250,62 @@
                                     Choisissez un texte
                                 </h3>
                                 
-                                <div class="text-carousel-container">
-                                    <RadzenCarousel Auto="false" class="modern-carousel" ButtonVariant="Variant.Filled">
-                                        <Items>
-                                            @foreach (var textR in TextRecords)
-                                            {
-                                                <RadzenCarouselItem>
-                                                    <div class="text-select-card">
-                                                        
-                                                        <div class="text-card-actions">
-                                                            @if (textRecordId == textR.Id)
-                                                            {
-                                                                <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="✓ Sélectionné" class="selected-badge-lg" />
-                                                            }
-                                                            else
-                                                            {
-                                                                <RadzenButton Click="args => SelectText(textR)" 
-                                                                              class="btn-select-lg">
-                                                                    <RadzenIcon Icon="check_circle" /> Sélectionner ce texte
-                                                                </RadzenButton>
-                                                            }
-                                                        </div>
-                                                        
-                                                        <div class="text-card-header">
-                                                            <h4 class="text-card-title">@textR.Name</h4>
-                                                        </div>
+                                @if (TextRecords == null || !TextRecords.Any())
+                                {
+                                    <div class="empty-text-state">
+                                        <RadzenIcon Icon="description" style="font-size: 5rem; color: #ccc; margin-bottom: 1.5rem;" />
+                                        <h3 style="color: #666; margin-bottom: 1rem;">Aucun texte disponible</h3>
+                                        <p style="color: #999; margin-bottom: 2rem;">Créez votre premier texte de lecture via le panneau enseignant</p>
+                                        <RadzenButton Click="NavigateToTeacherPanel" 
+                                                      ButtonStyle="ButtonStyle.Primary" 
+                                                      Size="ButtonSize.Large"
+                                                      class="btn-goto-teacher">
+                                            <RadzenIcon Icon="school" style="margin-right: 8px;" />
+                                            Aller au panneau enseignant
+                                        </RadzenButton>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="text-carousel-container">
+                                        <RadzenCarousel Auto="false" class="modern-carousel" ButtonVariant="Variant.Filled">
+                                            <Items>
+                                                @foreach (var textR in TextRecords)
+                                                {
+                                                    <RadzenCarouselItem>
+                                                        <div class="text-select-card">
+                                                            
+                                                            <div class="text-card-actions">
+                                                                @if (textRecordId == textR.Id)
+                                                                {
+                                                                    <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="✓ Sélectionné" class="selected-badge-lg" />
+                                                                }
+                                                                else
+                                                                {
+                                                                    <RadzenButton Click="args => SelectText(textR)" 
+                                                                                  class="btn-select-lg">
+                                                                        <RadzenIcon Icon="check_circle" /> Sélectionner ce texte
+                                                                    </RadzenButton>
+                                                                }
+                                                            </div>
+                                                            
+                                                            <div class="text-card-header">
+                                                                <h4 class="text-card-title">@textR.Name</h4>
+                                                            </div>
 
-                                                        <div class="text-card-preview">
-                                                            <RadzenImage Path="@(textR.FilePath + "/image.png")"
-                                                                         Style="width: 100%; border-radius: 8px;"/>
+                                                            <div class="text-card-preview">
+                                                                <RadzenImage Path="@(textR.FilePath + "/image.png")"
+                                                                             Style="width: 100%; border-radius: 8px;"/>
+                                                            </div>
+
+
                                                         </div>
-
-
-                                                    </div>
-                                                </RadzenCarouselItem>
-                                            }
-                                        </Items>
-                                    </RadzenCarousel>
-                                </div>
+                                                    </RadzenCarouselItem>
+                                                }
+                                            </Items>
+                                        </RadzenCarousel>
+                                    </div>
+                                }
                             </div>
                         </RadzenStepsItem>
                         <RadzenStepsItem Text="Calibration">
@@ -702,6 +720,25 @@
         margin: 0 auto;
     }
 
+    .empty-text-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem 2rem;
+        text-align: center;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        margin: 2rem auto;
+        max-width: 600px;
+    }
+
+    .btn-goto-teacher {
+        font-size: 1.1rem;
+        padding: 0.8rem 2rem;
+    }
+
     .text-select-card {
         background: white;
         border-radius: 15px;
@@ -1027,7 +1064,7 @@
     TextRecord textRecord = new TextRecord("", "", "", "");
     string studentId;
     string textRecordId;
-    private int selectedStudentMenu = 1;
+    private int selectedStudentMenu = 2;
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
@@ -1229,6 +1266,10 @@
         Students = new List<Student>(Db.Students.AsEnumerable());
 
         studentId = model.Id;
+
+        selectedStudentMenu = 2;
+        
+        
     }
 
     void OnInvalidSubmit(FormInvalidSubmitEventArgs args)
@@ -1299,6 +1340,11 @@
         readingId = reading.Id;
 
         OnChange();
+    }
+
+    void NavigateToTeacherPanel()
+    {
+        Navigation.NavigateTo("/teacher-panel");
     }
 
     public class WindowSize
