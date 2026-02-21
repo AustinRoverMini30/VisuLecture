@@ -1,4 +1,4 @@
-name: Build and Release Blazor with Artifacts
+name: Build and Release Blazor with Artifacts (Linux + Windows)
 
 on:
   push:
@@ -19,18 +19,32 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build
+      # Build pour Linux (cross-platform)
+      - name: Build (Linux)
         run: dotnet build --configuration Release
 
-      - name: Publish
-        run: dotnet publish --configuration Release --output ./publish
+      # Publish pour Linux (cross-platform)
+      - name: Publish (Linux)
+        run: dotnet publish --configuration Release --output ./publish/linux
 
-      - name: Create ZIP
-        run: zip -r VisuLecture.zip ./publish
+      # Publish pour Windows (self-contained, avec .exe)
+      - name: Publish (Windows)
+        run: dotnet publish --configuration Release --runtime win-x64 --self-contained true --output ./publish/win
 
+      # Créer un ZIP pour Linux
+      - name: Create ZIP (Linux)
+        run: zip -r VisuLecture_Linux.zip ./publish/linux
+
+      # Créer un ZIP pour Windows
+      - name: Create ZIP (Windows)
+        run: zip -r VisuLecture_Windows.zip ./publish/win
+
+      # Créer une Release avec les deux ZIPs
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: VisuLecture.zip
+          files: |
+            VisuLecture_Linux.zip
+            VisuLecture_Windows.zip
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
