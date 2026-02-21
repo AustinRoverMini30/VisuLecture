@@ -11,6 +11,7 @@ public class CalibrationService : BackgroundService
     private readonly ILogger<CalibrationService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private const string ConfigFilePath = "calibration_config.txt";
+    private const string CalibrationGaugeConfigFilePath = "calibration_gauge_config.txt";
     
     public string clientId = "";
     
@@ -22,6 +23,7 @@ public class CalibrationService : BackgroundService
     private List<PointGaze> gazePoints = new();
     
     public string calibrationModel = "none";
+    public bool enableCalibrationGauge = true; // Activer la jauge par défaut
     
     public CalibrationService(ILogger<CalibrationService> logger, IServiceScopeFactory scopeFactory)
     {
@@ -31,6 +33,9 @@ public class CalibrationService : BackgroundService
         
         // Charger le modèle de calibration depuis le fichier
         LoadCalibrationModel();
+        
+        // Charger la configuration de la jauge de calibration
+        LoadCalibrationGaugeConfig();
     }
     public bool IsClientWaiting(string clientId)
     {
@@ -314,6 +319,61 @@ public class CalibrationService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Sauvegarde l'état de la jauge de calibration dans un fichier texte
+    /// </summary>
+    public void SaveCalibrationGaugeConfig()
+    {
+        try
+        {
+            File.WriteAllText(CalibrationGaugeConfigFilePath, enableCalibrationGauge.ToString());
+            _logger.LogInformation($"Configuration de la jauge de calibration sauvegardée : {enableCalibrationGauge}");
+            Console.WriteLine($"Configuration de la jauge sauvegardée dans {CalibrationGaugeConfigFilePath} : {enableCalibrationGauge}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de la sauvegarde de la configuration de la jauge");
+            Console.WriteLine($"Erreur lors de la sauvegarde de la configuration de la jauge : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Charge l'état de la jauge de calibration depuis un fichier texte
+    /// </summary>
+    private void LoadCalibrationGaugeConfig()
+    {
+        try
+        {
+            if (File.Exists(CalibrationGaugeConfigFilePath))
+            {
+                string loadedConfig = File.ReadAllText(CalibrationGaugeConfigFilePath).Trim();
+                
+                if (bool.TryParse(loadedConfig, out bool gaugeEnabled))
+                {
+                    enableCalibrationGauge = gaugeEnabled;
+                    _logger.LogInformation($"Configuration de la jauge de calibration chargée : {enableCalibrationGauge}");
+                    Console.WriteLine($"Configuration de la jauge chargée depuis {CalibrationGaugeConfigFilePath} : {enableCalibrationGauge}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Valeur invalide dans le fichier : {loadedConfig}. Utilisation de la valeur par défaut 'true'.");
+                    Console.WriteLine($"Valeur invalide dans le fichier : {loadedConfig}. Utilisation de la valeur par défaut 'true'.");
+                    enableCalibrationGauge = true;
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Fichier de configuration de la jauge non trouvé. Utilisation de la valeur par défaut : {enableCalibrationGauge}");
+                Console.WriteLine($"Fichier de configuration de la jauge non trouvé. Utilisation de la valeur par défaut : {enableCalibrationGauge}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors du chargement de la configuration de la jauge");
+            Console.WriteLine($"Erreur lors du chargement de la configuration de la jauge : {ex.Message}");
+            enableCalibrationGauge = true; // Valeur par défaut en cas d'erreur
+        }
+    }
+
     
 }
-

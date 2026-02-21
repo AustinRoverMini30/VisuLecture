@@ -61,6 +61,18 @@
                                 <RadzenRadioButtonListItem Text="tiny_mlp" Value="6"/>
                             </Items>
                         </RadzenRadioButtonList>
+                        
+                        <h3 class="status-title" style="margin-top: 2rem;">Jauge de calibration</h3>
+                        <div class="gauge-config-container">
+                            <RadzenCheckBox @bind-Value=@enableCalibrationGauge 
+                                          TValue="bool" 
+                                          Change="@ChangeCalibrationGauge" 
+                                          style="margin-right: 0.5rem;" />
+                            <RadzenLabel Text="Afficher la jauge de temps lors de la calibration" />
+                        </div>
+                        <p class="gauge-description">
+                            Lorsque activée, un cercle indicateur s'affiche autour des points de calibration pour montrer le temps restant.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -755,6 +767,85 @@
         background: white;
         border-bottom: 1px solid #e9ecef;
     }
+    
+    .section-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .status-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+    }
+    
+    .status-header {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .status-icon {
+        width: 60px;
+        height: 60px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        padding: 10px;
+    }
+    
+    .status-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    
+    .status-info {
+        flex: 1;
+    }
+    
+    .status-title {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.5rem;
+        color: #333;
+        margin: 0 0 0.5rem 0;
+    }
+    
+    .status-description {
+        color: #666;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+    
+    .status-content {
+        padding-top: 1rem;
+    }
+    
+    .status-display {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .status-display.loading,
+    .status-display.running,
+    .status-display.stopped {
+        justify-content: space-between;
+    }
+    
+    .custom-badge {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+    }
 
     .install-output {
         width: 100%;
@@ -838,133 +929,26 @@
         background: #fef2f2;
         border: 1px solid #fecaca;
     }
-
-    .module-item:hover {
-        transform: translateX(5px);
-    }
-
-    .module-info {
+    
+    /* Gauge Config Section */
+    .gauge-config-container {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .gauge-description {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin: 0.5rem 0 0 0;
+        padding-left: 0.75rem;
+        font-style: italic;
     }
 
-    .module-status-icon {
-        font-size: 20px;
-    }
-
-    .module-item.installed .module-status-icon {
-        color: #16a34a;
-    }
-
-    .module-item.not-installed .module-status-icon {
-        color: #dc2626;
-    }
-
-    .module-name {
-        font-family: 'Courier New', monospace;
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: #333;
-    }
-
-    .module-version {
-        font-size: 0.85rem;
-        color: #666;
-        background: rgba(0, 0, 0, 0.05);
-        padding: 2px 8px;
-        border-radius: 4px;
-    }
-
-    .module-badge {
-        font-size: 0.85rem !important;
-        padding: 0.35rem 0.75rem !important;
-    }
-
-    .no-modules-message {
-        text-align: center;
-        padding: 2rem;
-        color: #666;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .no-modules-message p {
-        margin: 0;
-        font-size: 0.95rem;
-    }
-
-    .section-container {
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-
-    .status-card {
-        background: white;
-        border-radius: 15px;
-        padding: 2rem;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-        border: 1px solid #e9ecef;
-    }
-
-    .status-header {
-        display: flex;
-        align-items: center;
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .status-icon {
-        width: 60px;
-        height: 60px;
-        border-radius: 12px;
-        background: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    .status-info h3 {
-        font-family: 'Eurostile', sans-serif;
-        font-size: 1.4rem;
-        margin: 0 0 0.3rem 0;
-        color: #333;
-    }
-
-    .status-description {
-        margin: 0;
-        color: #666;
-        font-size: 0.95rem;
-    }
-
-    .status-content {
-        padding-top: 1rem;
-        border-top: 1px solid #e9ecef;
-    }
-
-    .status-display {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 1rem;
-    }
-
-    .custom-badge {
-        font-size: 1rem !important;
-        padding: 0.5rem 1rem !important;
-    }
-
-    .status-buttons {
-        display: flex;
-        gap: 0.8rem;
-        flex-wrap: wrap;
-    }
-
-    .btn-restart, .btn-stop, .btn-start {
+    .module-item-info {
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -1584,6 +1568,7 @@
     private Student newStudentModel = new Student();
 
     private int calibrationModel;
+    private bool enableCalibrationGauge;
     
     private int selectedInputMode = 1;
     private byte[]? uploadedImageBytes = null;
@@ -1975,6 +1960,9 @@ private async Task AnalyserImage(byte[] imageBytes)
             "tiny_mlp" => 6,
             _ => 1 // Valeur par défaut
         };
+        
+        // Initialiser enableCalibrationGauge selon la valeur chargée depuis le fichier
+        enableCalibrationGauge = CalibrationService.enableCalibrationGauge;
         
         // Nettoyage automatique des dossiers orphelins
         CleanupOrphanedTextFolders();
@@ -3138,6 +3126,16 @@ private async Task AnalyserImage(byte[] imageBytes)
         
         // Sauvegarder le modèle de calibration dans un fichier
         CalibrationService.SaveCalibrationModel();
+    }
+    
+    private void ChangeCalibrationGauge(bool value)
+    {
+        CalibrationService.enableCalibrationGauge = value;
+        
+        // Sauvegarder la configuration de la jauge dans un fichier
+        CalibrationService.SaveCalibrationGaugeConfig();
+        
+        Console.WriteLine($"Jauge de calibration : {(value ? "activée" : "désactivée")}");
     }
 
 }

@@ -385,21 +385,24 @@
                      left: @(dotX)px;
                      top: @(dotY)px;
                      transform: translate(-50%, -50%);">
-                <!-- Cercle de progression -->
-                <svg width="@(dotW + 40)" height="@(dotW + 40)" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-                    <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
-                            fill="none"
-                            stroke="rgba(102, 126, 234, 0.3)"
-                            stroke-width="4"/>
-                    <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
-                            fill="none"
-                            stroke="#667eea"
-                            stroke-width="4"
-                            stroke-dasharray="@(calibrationCircumference.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
-                            stroke-dashoffset="@(calibrationProgress.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
-                            stroke-linecap="round"
-                            style="transform: rotate(-90deg); transform-origin: 50% 50%;"/>
-                </svg>
+                <!-- Cercle de progression (affiché seulement si activé dans les paramètres) -->
+                @if (CalibrationService.enableCalibrationGauge)
+                {
+                    <svg width="@(dotW + 40)" height="@(dotW + 40)" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                        <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
+                                fill="none"
+                                stroke="rgba(102, 126, 234, 0.3)"
+                                stroke-width="4"/>
+                        <circle cx="@((dotW + 40) / 2)" cy="@((dotW + 40) / 2)" r="@((dotW + 30) / 2)"
+                                fill="none"
+                                stroke="#667eea"
+                                stroke-width="4"
+                                stroke-dasharray="@(calibrationCircumference.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
+                                stroke-dashoffset="@(calibrationProgress.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
+                                stroke-linecap="round"
+                                style="transform: rotate(-90deg); transform-origin: 50% 50%;"/>
+                    </svg>
+                }
                 <!-- Point de calibration -->
                 @if (GetThemeName() == "défaut")
                 {
