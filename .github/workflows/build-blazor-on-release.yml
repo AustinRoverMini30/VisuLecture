@@ -26,11 +26,11 @@ jobs:
         run: dotnet publish --configuration Release --output ./publish
 
       - name: Create ZIP
-        run: zip -r blazor-app.zip ./publish
+        run: zip -r VisuLecture.zip ./publish
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: blazor-app.zip
+          files: VisuLecture.zip
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
