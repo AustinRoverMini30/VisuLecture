@@ -102,6 +102,84 @@
                 </div>
                 
                 <div class="status-content">
+                    <!-- Python Version Selector -->
+                    <div class="python-version-section">
+                        <h4 class="section-subtitle">
+                            <RadzenIcon Icon="settings" style="margin-right: 8px;" />
+                            Version Python
+                        </h4>
+                        <div class="python-version-selector">
+                            <RadzenDropDown @bind-Value="@selectedPythonVersion" 
+                                          Data="@availablePythonVersions" 
+                                          TextProperty="DisplayName"
+                                          ValueProperty="Command"
+                                          Change="@OnPythonVersionChanged"
+                                          Placeholder="Sélectionner une version Python"
+                                          Style="width: 100%; max-width: 400px;" />
+                            <RadzenButton Click="@ScanPythonVersions" 
+                                        Size="ButtonSize.Small" 
+                                        ButtonStyle="ButtonStyle.Light"
+                                        Disabled="@isScanningPython"
+                                        Style="margin-left: 10px;"
+                                        title="Scanner les versions Python installées">
+                                @if (isScanningPython)
+                                {
+                                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.ExtraSmall" />
+                                }
+                                else
+                                {
+                                    <RadzenIcon Icon="refresh" />
+                                }
+                            </RadzenButton>
+                        </div>
+                        @if (!string.IsNullOrEmpty(selectedPythonVersion))
+                        {
+                            <p class="python-version-info">
+                                <RadzenIcon Icon="check_circle" style="color: #4caf50; margin-right: 5px;" />
+                                Version sélectionnée : <strong>@selectedPythonVersion</strong>
+                            </p>
+                        }
+                    </div>
+                    
+                    <!-- Pip Version Selector -->
+                    <div class="python-version-section">
+                        <h4 class="section-subtitle">
+                            <RadzenIcon Icon="download" style="margin-right: 8px;" />
+                            Version Pip
+                        </h4>
+                        <div class="python-version-selector">
+                            <RadzenDropDown @bind-Value="@selectedPipVersion" 
+                                          Data="@availablePipVersions" 
+                                          TextProperty="DisplayName"
+                                          ValueProperty="Command"
+                                          Change="@OnPipVersionChanged"
+                                          Placeholder="Sélectionner une version Pip"
+                                          Style="width: 100%; max-width: 400px;" />
+                            <RadzenButton Click="@ScanPipVersions" 
+                                        Size="ButtonSize.Small" 
+                                        ButtonStyle="ButtonStyle.Light"
+                                        Disabled="@isScanningPip"
+                                        Style="margin-left: 10px;"
+                                        title="Scanner les versions Pip installées">
+                                @if (isScanningPip)
+                                {
+                                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.ExtraSmall" />
+                                }
+                                else
+                                {
+                                    <RadzenIcon Icon="refresh" />
+                                }
+                            </RadzenButton>
+                        </div>
+                        @if (!string.IsNullOrEmpty(selectedPipVersion))
+                        {
+                            <p class="python-version-info">
+                                <RadzenIcon Icon="check_circle" style="color: #4caf50; margin-right: 5px;" />
+                                Version sélectionnée : <strong>@selectedPipVersion</strong>
+                            </p>
+                        }
+                    </div>
+                    
                     @if (PythonInstallStatus == "Installation en cours...")
                     {
                         <div class="status-display loading">
@@ -882,6 +960,37 @@
     .install-output.error pre {
         color: #c53030;
     }
+    
+    /* Python Version Selector */
+    .python-version-section {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .section-subtitle {
+        font-family: 'Eurostile', sans-serif;
+        font-size: 1.1rem;
+        color: #333;
+        margin: 0 0 1rem 0;
+        display: flex;
+        align-items: center;
+    }
+    
+    .python-version-selector {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 0.5rem;
+    }
+    
+    .python-version-info {
+        margin: 0.5rem 0 0 0;
+        font-size: 0.9rem;
+        color: #666;
+        display: flex;
+        align-items: center;
+    }
 
     /* Module Status Section */
     .module-status-section {
@@ -1555,6 +1664,14 @@
         public bool IsInstalled { get; set; }
         public string Version { get; set; } = "";
     }
+    
+    // Classe pour représenter une version Python disponible
+    public class PythonVersionInfo
+    {
+        public string Command { get; set; } = "";
+        public string Version { get; set; } = "";
+        public string DisplayName => !string.IsNullOrEmpty(Version) ? $"{Command} ({Version})" : Command;
+    }
 
     private List<Student> Students;
     private List<TextRecord> TextRecords;
@@ -1567,6 +1684,17 @@
     private List<PythonModule> pythonModules = new();
     private bool isCheckingModules = false;
     private bool hasCheckedModules = false;
+    
+    // Variables pour le sélecteur Python
+    private List<PythonVersionInfo> availablePythonVersions = new();
+    private string selectedPythonVersion = "";
+    private bool isScanningPython = false;
+    
+    // Variables pour le sélecteur Pip
+    private List<PythonVersionInfo> availablePipVersions = new();
+    private string selectedPipVersion = "";
+    private bool isScanningPip = false;
+    
     private int selectedTextMenu = 1;
     private int selectedStudentMenu = 1;
     private int selectedThemeMenu = 1;
@@ -1971,6 +2099,18 @@ private async Task AnalyserImage(byte[] imageBytes)
         // Initialiser enableCalibrationGauge selon la valeur chargée depuis le fichier
         enableCalibrationGauge = CalibrationService.enableCalibrationGauge;
         
+        // Charger la version Python sélectionnée
+        selectedPythonVersion = CalibrationService.GetSelectedPythonVersion();
+        
+        // Charger la version Pip sélectionnée
+        selectedPipVersion = GetSelectedPipVersion();
+        
+        // Scanner les versions Python disponibles
+        _ = ScanPythonVersions();
+        
+        // Scanner les versions Pip disponibles
+        _ = ScanPipVersions();
+        
         // Nettoyage automatique des dossiers orphelins
         CleanupOrphanedTextFolders();
     }
@@ -2068,10 +2208,13 @@ private async Task AnalyserImage(byte[] imageBytes)
                 await InvokeAsync(StateHasChanged);
                 return;
             }
+            
+            // Utiliser la version pip sélectionnée ou la version par défaut
+            string pipCommand = string.IsNullOrEmpty(selectedPipVersion) ? "pip3" : selectedPipVersion;
 
             var psi = new ProcessStartInfo
             {
-                FileName = "pip",
+                FileName = pipCommand,
                 Arguments = $"install -r \"{requirementsPath}\" --upgrade",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -2197,9 +2340,12 @@ private async Task AnalyserImage(byte[] imageBytes)
             {
                 var module = new PythonModule { Name = moduleName };
                 
+                // Utiliser la version pip sélectionnée ou la version par défaut
+                string pipCommand = string.IsNullOrEmpty(selectedPipVersion) ? "pip3" : selectedPipVersion;
+                
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "pip",
+                    FileName = pipCommand,
                     Arguments = $"show {moduleName}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -3153,6 +3299,277 @@ private async Task AnalyserImage(byte[] imageBytes)
             new Dictionary<string, object> { { "ErrorLogs", errorLogs } },
             new DialogOptions { Width = "80%", Height = "70%", Resizable = true, Draggable = true });
     }
+    
+    /// <summary>
+    /// Scanne le système pour trouver les versions Python installées
+    /// </summary>
+    private async Task ScanPythonVersions()
+    {
+        isScanningPython = true;
+        StateHasChanged();
+        
+        try
+        {
+            availablePythonVersions.Clear();
+            
+            // Liste des commandes Python courantes à tester
+            var pythonCommands = new List<string>
+            {
+                "python3.18", "python3.17", "python3.16", "python3.15", "python3.14",
+                "python3.13", "python3.12", "python3.11", "python3.10", "python3.9",
+                "python3.8", "python3.7", "python3", "python"
+            };
+            
+            foreach (var cmd in pythonCommands)
+            {
+                try
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = cmd,
+                            Arguments = "--version",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        }
+                    };
+                    
+                    process.Start();
+                    var output = await process.StandardOutput.ReadToEndAsync();
+                    var error = await process.StandardError.ReadToEndAsync();
+                    await process.WaitForExitAsync();
+                    
+                    if (process.ExitCode == 0)
+                    {
+                        var versionOutput = !string.IsNullOrEmpty(output) ? output : error;
+                        var version = versionOutput.Replace("Python", "").Trim();
+                        
+                        // Éviter les doublons (même version avec commandes différentes)
+                        if (!availablePythonVersions.Any(v => v.Version == version))
+                        {
+                            availablePythonVersions.Add(new PythonVersionInfo
+                            {
+                                Command = cmd,
+                                Version = version
+                            });
+                        }
+                    }
+                }
+                catch
+                {
+                    // La commande n'existe pas, on continue
+                    continue;
+                }
+            }
+            
+            if (!availablePythonVersions.Any())
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Aucune version Python trouvée", 
+                    "Aucune installation Python n'a été détectée sur le système.");
+            }
+            else
+            {
+                Console.WriteLine($"Versions Python trouvées : {availablePythonVersions.Count}");
+                
+                // Si aucune version n'est sélectionnée, sélectionner la première
+                if (string.IsNullOrEmpty(selectedPythonVersion) && availablePythonVersions.Any())
+                {
+                    selectedPythonVersion = availablePythonVersions[0].Command;
+                    CalibrationService.SetSelectedPythonVersion(selectedPythonVersion);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du scan des versions Python : {ex.Message}");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                $"Erreur lors du scan des versions Python : {ex.Message}");
+        }
+        finally
+        {
+            isScanningPython = false;
+            StateHasChanged();
+        }
+    }
+    
+    /// <summary>
+    /// Appelé quand l'utilisateur change la version Python sélectionnée
+    /// </summary>
+    private void OnPythonVersionChanged(object value)
+    {
+        if (value is string pythonVersion)
+        {
+            selectedPythonVersion = pythonVersion;
+            CalibrationService.SetSelectedPythonVersion(pythonVersion);
+            
+            NotificationService.Notify(NotificationSeverity.Success, "Version Python mise à jour", 
+                $"La version Python sélectionnée est maintenant : {pythonVersion}");
+            
+            Console.WriteLine($"Version Python changée : {pythonVersion}");
+        }
+    }
+    
+    /// <summary>
+    /// Scanne le système pour trouver les versions Pip installées
+    /// </summary>
+    private async Task ScanPipVersions()
+    {
+        isScanningPip = true;
+        StateHasChanged();
+        
+        try
+        {
+            availablePipVersions.Clear();
+            
+            // Liste des commandes Pip courantes à tester
+            var pipCommands = new List<string>
+            {
+                "pip3.18", "pip3.17", "pip3.16", "pip3.15", "pip3.14",
+                "pip3.13", "pip3.12", "pip3.11", "pip3.10", "pip3.9",
+                "pip3.8", "pip3.7", "pip3", "pip"
+            };
+            
+            foreach (var cmd in pipCommands)
+            {
+                try
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = cmd,
+                            Arguments = "--version",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        }
+                    };
+                    
+                    process.Start();
+                    var output = await process.StandardOutput.ReadToEndAsync();
+                    var error = await process.StandardError.ReadToEndAsync();
+                    await process.WaitForExitAsync();
+                    
+                    if (process.ExitCode == 0)
+                    {
+                        var versionOutput = !string.IsNullOrEmpty(output) ? output : error;
+                        // Format typique: "pip 23.3.1 from /usr/lib/python3.11/site-packages/pip (python 3.11)"
+                        var versionMatch = System.Text.RegularExpressions.Regex.Match(versionOutput, @"pip\s+([\d\.]+)");
+                        var version = versionMatch.Success ? versionMatch.Groups[1].Value : versionOutput.Trim();
+                        
+                        // Éviter les doublons (même version avec commandes différentes)
+                        if (!availablePipVersions.Any(v => v.Version == version))
+                        {
+                            availablePipVersions.Add(new PythonVersionInfo
+                            {
+                                Command = cmd,
+                                Version = version
+                            });
+                        }
+                    }
+                }
+                catch
+                {
+                    // La commande n'existe pas, on continue
+                    continue;
+                }
+            }
+            
+            if (!availablePipVersions.Any())
+            {
+                NotificationService.Notify(NotificationSeverity.Warning, "Aucune version Pip trouvée", 
+                    "Aucune installation Pip n'a été détectée sur le système.");
+            }
+            else
+            {
+                Console.WriteLine($"Versions Pip trouvées : {availablePipVersions.Count}");
+                
+                // Si aucune version n'est sélectionnée, sélectionner la première
+                if (string.IsNullOrEmpty(selectedPipVersion) && availablePipVersions.Any())
+                {
+                    selectedPipVersion = availablePipVersions[0].Command;
+                    SetSelectedPipVersion(selectedPipVersion);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du scan des versions Pip : {ex.Message}");
+            NotificationService.Notify(NotificationSeverity.Error, "Erreur", 
+                $"Erreur lors du scan des versions Pip : {ex.Message}");
+        }
+        finally
+        {
+            isScanningPip = false;
+            StateHasChanged();
+        }
+    }
+    
+    /// <summary>
+    /// Appelé quand l'utilisateur change la version Pip sélectionnée
+    /// </summary>
+    private void OnPipVersionChanged(object value)
+    {
+        if (value is string pipVersion)
+        {
+            selectedPipVersion = pipVersion;
+            SetSelectedPipVersion(pipVersion);
+            
+            NotificationService.Notify(NotificationSeverity.Success, "Version Pip mise à jour", 
+                $"La version Pip sélectionnée est maintenant : {pipVersion}");
+            
+            Console.WriteLine($"Version Pip changée : {pipVersion}");
+        }
+    }
+    
+    /// <summary>
+    /// Sauvegarde la version Pip sélectionnée dans un fichier
+    /// </summary>
+    private void SetSelectedPipVersion(string pipVersion)
+    {
+        try
+        {
+            const string pipVersionConfigFilePath = "pip_version_config.txt";
+            File.WriteAllText(pipVersionConfigFilePath, pipVersion);
+            Console.WriteLine($"Version Pip sauvegardée : {pipVersion}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors de la sauvegarde de la version Pip : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Récupère la version Pip actuellement sélectionnée
+    /// </summary>
+    private string GetSelectedPipVersion()
+    {
+        try
+        {
+            const string pipVersionConfigFilePath = "pip_version_config.txt";
+            if (File.Exists(pipVersionConfigFilePath))
+            {
+                string loadedVersion = File.ReadAllText(pipVersionConfigFilePath).Trim();
+                
+                if (!string.IsNullOrEmpty(loadedVersion))
+                {
+                    Console.WriteLine($"Version Pip chargée : {loadedVersion}");
+                    return loadedVersion;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du chargement de la version Pip : {ex.Message}");
+        }
+        
+        return "pip3"; // Valeur par défaut
+    }
 
 }
+
 

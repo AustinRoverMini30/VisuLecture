@@ -12,6 +12,7 @@ public class CalibrationService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private const string ConfigFilePath = "calibration_config.txt";
     private const string CalibrationGaugeConfigFilePath = "calibration_gauge_config.txt";
+    private const string PythonVersionConfigFilePath = "python_version_config.txt";
     private const string ErrorLogFilePath = "calibration_errors.log";
     
     public string clientId = "";
@@ -26,6 +27,7 @@ public class CalibrationService : BackgroundService
     
     public string calibrationModel = "none";
     public bool enableCalibrationGauge = true; // Activer la jauge par défaut
+    private string selectedPythonVersion = "python3.18"; // Version par défaut
     
     public CalibrationService(ILogger<CalibrationService> logger, IServiceScopeFactory scopeFactory)
     {
@@ -38,6 +40,9 @@ public class CalibrationService : BackgroundService
         
         // Charger la configuration de la jauge de calibration
         LoadCalibrationGaugeConfig();
+        
+        // Charger la version Python sélectionnée
+        LoadSelectedPythonVersion();
         
         // Charger les logs d'erreurs
         LoadErrorLogs();
@@ -160,7 +165,7 @@ public class CalibrationService : BackgroundService
                 }
             }
             
-            string pythonExe = "python3.18";
+            string pythonExe = selectedPythonVersion;
             string videoPrefix = $@"uploads/{clientId}/video"; // Préfixe pour video0.webm, video1.webm, etc.
             string calibScriptPath = @"Calibrate.py";
             string readScriptPath = @"Reading.py";
@@ -589,6 +594,70 @@ public class CalibrationService : BackgroundService
             _logger.LogError(ex, "Erreur lors de l'effacement des logs d'erreurs");
             Console.WriteLine($"Erreur lors de l'effacement des logs d'erreurs : {ex.Message}");
         }
+    }
+    
+    /// <summary>
+    /// Charge la version Python sélectionnée depuis le fichier
+    /// </summary>
+    private void LoadSelectedPythonVersion()
+    {
+        try
+        {
+            if (File.Exists(PythonVersionConfigFilePath))
+            {
+                string loadedVersion = File.ReadAllText(PythonVersionConfigFilePath).Trim();
+                
+                if (!string.IsNullOrEmpty(loadedVersion))
+                {
+                    selectedPythonVersion = loadedVersion;
+                    _logger.LogInformation($"Version Python chargée : {selectedPythonVersion}");
+                    Console.WriteLine($"Version Python chargée depuis {PythonVersionConfigFilePath} : {selectedPythonVersion}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Fichier de configuration Python vide. Utilisation de la version par défaut : {selectedPythonVersion}");
+                    Console.WriteLine($"Fichier de configuration Python vide. Utilisation de la version par défaut : {selectedPythonVersion}");
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Fichier de configuration Python non trouvé. Utilisation de la version par défaut : {selectedPythonVersion}");
+                Console.WriteLine($"Fichier de configuration Python non trouvé. Utilisation de la version par défaut : {selectedPythonVersion}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors du chargement de la version Python");
+            Console.WriteLine($"Erreur lors du chargement de la version Python : {ex.Message}");
+            selectedPythonVersion = "python3.18"; // Valeur par défaut en cas d'erreur
+        }
+    }
+    
+    /// <summary>
+    /// Sauvegarde la version Python sélectionnée dans un fichier
+    /// </summary>
+    public void SetSelectedPythonVersion(string pythonVersion)
+    {
+        try
+        {
+            selectedPythonVersion = pythonVersion;
+            File.WriteAllText(PythonVersionConfigFilePath, pythonVersion);
+            _logger.LogInformation($"Version Python sauvegardée : {pythonVersion}");
+            Console.WriteLine($"Version Python sauvegardée dans {PythonVersionConfigFilePath} : {pythonVersion}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de la sauvegarde de la version Python");
+            Console.WriteLine($"Erreur lors de la sauvegarde de la version Python : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Récupère la version Python actuellement sélectionnée
+    /// </summary>
+    public string GetSelectedPythonVersion()
+    {
+        return selectedPythonVersion;
     }
 
     
