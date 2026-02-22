@@ -12,6 +12,7 @@ public class CalibrationService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private const string ConfigFilePath = "calibration_config.txt";
     private const string CalibrationGaugeConfigFilePath = "calibration_gauge_config.txt";
+    private const string ErrorLogFilePath = "calibration_errors.log";
     
     public string clientId = "";
     
@@ -21,6 +22,7 @@ public class CalibrationService : BackgroundService
         = new();
     private CancellationTokenSource cts;
     private List<PointGaze> gazePoints = new();
+    private List<CalibrationErrorLog> errorLogs = new();
     
     public string calibrationModel = "none";
     public bool enableCalibrationGauge = true; // Activer la jauge par défaut
@@ -36,6 +38,9 @@ public class CalibrationService : BackgroundService
         
         // Charger la configuration de la jauge de calibration
         LoadCalibrationGaugeConfig();
+        
+        // Charger les logs d'erreurs
+        LoadErrorLogs();
     }
     public bool IsClientWaiting(string clientId)
     {
@@ -129,111 +134,198 @@ public class CalibrationService : BackgroundService
         _logger.LogInformation($"HandleActionAsync started for clientId: {clientId}");
         Console.WriteLine($"HandleActionAsync: Started processing for {clientId}");
         
-        // Récupérer les dimensions depuis la base de données
-        int screenWidth = 1920;
-        int screenHeight = 1080;
-        
-        using (var scope = _scopeFactory.CreateScope())
+        try
         {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var reading = await db.Readings.FirstOrDefaultAsync(r => r.Id == clientId);
+            // Récupérer les dimensions depuis la base de données
+            int screenWidth = 1920;
+            int screenHeight = 1080;
             
-            if (reading != null)
+            using (var scope = _scopeFactory.CreateScope())
             {
-                screenWidth = reading.ScreenWidth > 0 ? reading.ScreenWidth : 1920;
-                screenHeight = reading.ScreenHeight > 0 ? reading.ScreenHeight : 1080;
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var reading = await db.Readings.FirstOrDefaultAsync(r => r.Id == clientId);
                 
-                Console.WriteLine($"Dimensions d'écran récupérées: {screenWidth}x{screenHeight}");
-                _logger.LogInformation($"Screen dimensions: {screenWidth}x{screenHeight}");
+                if (reading != null)
+                {
+                    screenWidth = reading.ScreenWidth > 0 ? reading.ScreenWidth : 1920;
+                    screenHeight = reading.ScreenHeight > 0 ? reading.ScreenHeight : 1080;
+                    
+                    Console.WriteLine($"Dimensions d'écran récupérées: {screenWidth}x{screenHeight}");
+                    _logger.LogInformation($"Screen dimensions: {screenWidth}x{screenHeight}");
+                }
+                else
+                {
+                    Console.WriteLine($"Reading non trouvée pour {clientId}, utilisation des dimensions par défaut");
+                    _logger.LogWarning($"Reading not found for {clientId}, using default dimensions");
+                }
             }
-            else
-            {
-                Console.WriteLine($"Reading non trouvée pour {clientId}, utilisation des dimensions par défaut");
-                _logger.LogWarning($"Reading not found for {clientId}, using default dimensions");
-            }
-        }
-        
-        string pythonExe = "python3.11";
-        string videoPrefix = $@"uploads/{clientId}/video"; // Préfixe pour video0.webm, video1.webm, etc.
-        string calibScriptPath = @"Calibrate.py";
-        string readScriptPath = @"Reading.py";
-        string cleanDataScriptPath = @"clean_data.py";
-        string pointsCsv = "records/" + clientId + "/raw.csv";
-        string wordsCsv = "wwwroot/"+textRecordFilePath+"/resultats_ocr.csv";
-        string outputCleanedCsv = "records/" + clientId + "/cleaned.csv";
-        string outputNormalizedCsv = "records/" + clientId + "/normalized.csv";
-        string outputSmoothedBothCsv = "records/" + clientId + "/smoothedBoth.csv";
-        string outputSmoothedYCsv = "records/" + clientId + "/smoothedY.csv";
-        
-        // Exécuter le script de calibration Python avec le préfixe des vidéos
-        Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
-        _logger.LogInformation($"Starting Calibrate.py for {clientId}");
-        
-        Console.WriteLine($"Modèle de calibration utilisé : {calibrationModel}");
-        
-        var calibProcess = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = pythonExe,
-                Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width {screenWidth} --height {screenHeight} --model {calibrationModel}",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            }
-        };
-
-        calibProcess.Start();
-        
-        // Afficher les logs Python pour le debug
-        string output = await calibProcess.StandardOutput.ReadToEndAsync();
-        string error = await calibProcess.StandardError.ReadToEndAsync();
-        
-        if (!string.IsNullOrEmpty(output))
-        {
-            Console.WriteLine($"Calibrate.py output: {output}");
-            _logger.LogInformation($"Calibrate.py output: {output}");
-        }
-        if (!string.IsNullOrEmpty(error))
-        {
-            Console.WriteLine($"Calibrate.py error: {error}");
-            _logger.LogError($"Calibrate.py error: {error}");
-        }
             
-        await calibProcess.WaitForExitAsync();
-        Console.WriteLine($"Calibrate.py terminé avec code: {calibProcess.ExitCode}");
-        _logger.LogInformation($"Calibrate.py finished with exit code: {calibProcess.ExitCode}");
-        
-        cts = new CancellationTokenSource();
-        gazePoints.Clear();
-        
-        // Exécuter Reading.py
-        Console.WriteLine($"Lancement de Reading.py pour {clientId}...");
-        _logger.LogInformation($"Starting Reading.py for {clientId}");
-        
-        string videoPath = $@"uploads/{clientId}/reading.webm";
-        await Process.Start(pythonExe, $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width {screenWidth} --height {screenHeight} --model {calibrationModel}").WaitForExitAsync();
-        
-        Console.WriteLine($"Reading.py terminé pour {clientId}");
-        _logger.LogInformation($"Reading.py finished for {clientId}");
-        
-        // Exécuter clean_data.py
-        Console.WriteLine($"Lancement de clean_data.py pour {clientId}...");
-        _logger.LogInformation($"Starting clean_data.py for {clientId}");
-        
-        await Process.Start(
-            pythonExe,
-            $"\"{cleanDataScriptPath}\" --points \"{pointsCsv}\" --words \"{wordsCsv}\" --cleaned \"{outputCleanedCsv}\" " +
-            $"--normalized \"{outputNormalizedCsv}\" --smoothedBoth \"{outputSmoothedBothCsv}\" --smoothedY \"{outputSmoothedYCsv}\""
-        ).WaitForExitAsync();
+            string pythonExe = "python3.18";
+            string videoPrefix = $@"uploads/{clientId}/video"; // Préfixe pour video0.webm, video1.webm, etc.
+            string calibScriptPath = @"Calibrate.py";
+            string readScriptPath = @"Reading.py";
+            string cleanDataScriptPath = @"clean_data.py";
+            string pointsCsv = "records/" + clientId + "/raw.csv";
+            string wordsCsv = "wwwroot/"+textRecordFilePath+"/resultats_ocr.csv";
+            string outputCleanedCsv = "records/" + clientId + "/cleaned.csv";
+            string outputNormalizedCsv = "records/" + clientId + "/normalized.csv";
+            string outputSmoothedBothCsv = "records/" + clientId + "/smoothedBoth.csv";
+            string outputSmoothedYCsv = "records/" + clientId + "/smoothedY.csv";
+            
+            // Exécuter le script de calibration Python avec le préfixe des vidéos
+            Console.WriteLine($"Lancement de Calibrate.py pour {clientId}...");
+            _logger.LogInformation($"Starting Calibrate.py for {clientId}");
+            
+            Console.WriteLine($"Modèle de calibration utilisé : {calibrationModel}");
+            
+            var calibProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = pythonExe,
+                    Arguments = $"\"{calibScriptPath}\" --video-prefix \"{videoPrefix}\" --calibration 9p --duration 5 --width {screenWidth} --height {screenHeight} --model {calibrationModel}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }
+            };
 
-        Console.WriteLine($"clean_data.py terminé pour {clientId}");
-        _logger.LogInformation($"clean_data.py finished for {clientId}");
-        
-        Console.WriteLine($"Traitement complet terminé pour {clientId}");
-        _logger.LogInformation($"Complete processing finished for {clientId}");
-        
-        clientId = "";
+            calibProcess.Start();
+            
+            // Afficher les logs Python pour le debug
+            string output = await calibProcess.StandardOutput.ReadToEndAsync();
+            string error = await calibProcess.StandardError.ReadToEndAsync();
+            
+            if (!string.IsNullOrEmpty(output))
+            {
+                Console.WriteLine($"Calibrate.py output: {output}");
+                _logger.LogInformation($"Calibrate.py output: {output}");
+            }
+            if (!string.IsNullOrEmpty(error))
+            {
+                Console.WriteLine($"Calibrate.py error: {error}");
+                _logger.LogError($"Calibrate.py error: {error}");
+            }
+                
+            await calibProcess.WaitForExitAsync();
+            var calibExitCode = calibProcess.ExitCode;
+            Console.WriteLine($"Calibrate.py terminé avec code: {calibExitCode}");
+            _logger.LogInformation($"Calibrate.py finished with exit code: {calibExitCode}");
+            
+            // Vérifier le code de sortie de Calibrate.py
+            if (calibExitCode != 0)
+            {
+                throw new Exception($"Calibrate.py a échoué avec le code de sortie {calibExitCode}");
+            }
+            
+            cts = new CancellationTokenSource();
+            gazePoints.Clear();
+            
+            // Exécuter Reading.py
+            Console.WriteLine($"Lancement de Reading.py pour {clientId}...");
+            _logger.LogInformation($"Starting Reading.py for {clientId}");
+            
+            string videoPath = $@"uploads/{clientId}/reading.webm";
+            var readProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = pythonExe,
+                    Arguments = $"\"{readScriptPath}\" --video \"{videoPath}\" --csv \"{pointsCsv}\" --filter kde --width {screenWidth} --height {screenHeight} --model {calibrationModel}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }
+            };
+            
+            readProcess.Start();
+            
+            string readOutput = await readProcess.StandardOutput.ReadToEndAsync();
+            string readError = await readProcess.StandardError.ReadToEndAsync();
+            
+            if (!string.IsNullOrEmpty(readOutput))
+            {
+                Console.WriteLine($"Reading.py output: {readOutput}");
+                _logger.LogInformation($"Reading.py output: {readOutput}");
+            }
+            if (!string.IsNullOrEmpty(readError))
+            {
+                Console.WriteLine($"Reading.py error: {readError}");
+                _logger.LogError($"Reading.py error: {readError}");
+            }
+            
+            await readProcess.WaitForExitAsync();
+            var readExitCode = readProcess.ExitCode;
+            
+            if (readExitCode != 0)
+            {
+                throw new Exception($"Reading.py a échoué avec le code de sortie {readExitCode}");
+            }
+            
+            Console.WriteLine($"Reading.py terminé pour {clientId}");
+            _logger.LogInformation($"Reading.py finished for {clientId}");
+            
+            // Exécuter clean_data.py
+            Console.WriteLine($"Lancement de clean_data.py pour {clientId}...");
+            _logger.LogInformation($"Starting clean_data.py for {clientId}");
+            
+            var cleanProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = pythonExe,
+                    Arguments = $"\"{cleanDataScriptPath}\" --points \"{pointsCsv}\" --words \"{wordsCsv}\" --cleaned \"{outputCleanedCsv}\" " +
+                                $"--normalized \"{outputNormalizedCsv}\" --smoothedBoth \"{outputSmoothedBothCsv}\" --smoothedY \"{outputSmoothedYCsv}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                }
+            };
+            
+            cleanProcess.Start();
+            
+            string cleanOutput = await cleanProcess.StandardOutput.ReadToEndAsync();
+            string cleanError = await cleanProcess.StandardError.ReadToEndAsync();
+            
+            if (!string.IsNullOrEmpty(cleanOutput))
+            {
+                Console.WriteLine($"clean_data.py output: {cleanOutput}");
+                _logger.LogInformation($"clean_data.py output: {cleanOutput}");
+            }
+            if (!string.IsNullOrEmpty(cleanError))
+            {
+                Console.WriteLine($"clean_data.py error: {cleanError}");
+                _logger.LogError($"clean_data.py error: {cleanError}");
+            }
+            
+            await cleanProcess.WaitForExitAsync();
+            var cleanExitCode = cleanProcess.ExitCode;
+
+            if (cleanExitCode != 0)
+            {
+                throw new Exception($"clean_data.py a échoué avec le code de sortie {cleanExitCode}");
+            }
+
+            Console.WriteLine($"clean_data.py terminé pour {clientId}");
+            _logger.LogInformation($"clean_data.py finished for {clientId}");
+            
+            Console.WriteLine($"Traitement complet terminé pour {clientId}");
+            _logger.LogInformation($"Complete processing finished for {clientId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erreur lors du traitement de {clientId}: {ex.Message}");
+            _logger.LogError(ex, $"Erreur lors du traitement de {clientId}");
+            
+            // Enregistrer l'erreur dans les logs
+            LogCalibrationError(clientId, ex.Message, ex.StackTrace ?? "");
+            
+            Console.WriteLine($"Passage à l'élément suivant de la queue...");
+        }
+        finally
+        {
+            clientId = "";
+        }
     }
     
     public Task NotifyCalibrationCreation(string clientId)
@@ -372,6 +464,130 @@ public class CalibrationService : BackgroundService
             _logger.LogError(ex, "Erreur lors du chargement de la configuration de la jauge");
             Console.WriteLine($"Erreur lors du chargement de la configuration de la jauge : {ex.Message}");
             enableCalibrationGauge = true; // Valeur par défaut en cas d'erreur
+        }
+    }
+
+    /// <summary>
+    /// Enregistre une erreur de calibration dans les logs
+    /// </summary>
+    private void LogCalibrationError(string clientId, string errorMessage, string stackTrace)
+    {
+        try
+        {
+            var errorLog = new CalibrationErrorLog(clientId, errorMessage, stackTrace);
+            errorLogs.Add(errorLog);
+            
+            // Sauvegarder dans le fichier
+            SaveErrorLogs();
+            
+            _logger.LogInformation($"Erreur de calibration enregistrée pour {clientId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de l'enregistrement du log d'erreur");
+            Console.WriteLine($"Erreur lors de l'enregistrement du log d'erreur : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Charge les logs d'erreurs depuis le fichier
+    /// </summary>
+    private void LoadErrorLogs()
+    {
+        try
+        {
+            if (File.Exists(ErrorLogFilePath))
+            {
+                var lines = File.ReadAllLines(ErrorLogFilePath);
+                errorLogs.Clear();
+                
+                for (int i = 0; i < lines.Length; i += 4)
+                {
+                    if (i + 3 < lines.Length)
+                    {
+                        var log = new CalibrationErrorLog
+                        {
+                            ClientId = lines[i],
+                            Timestamp = DateTime.Parse(lines[i + 1]),
+                            ErrorMessage = lines[i + 2],
+                            StackTrace = lines[i + 3]
+                        };
+                        errorLogs.Add(log);
+                    }
+                }
+                
+                _logger.LogInformation($"Logs d'erreurs chargés : {errorLogs.Count} erreur(s)");
+                Console.WriteLine($"Logs d'erreurs chargés : {errorLogs.Count} erreur(s)");
+            }
+            else
+            {
+                _logger.LogInformation("Aucun fichier de logs d'erreurs trouvé");
+                Console.WriteLine("Aucun fichier de logs d'erreurs trouvé");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors du chargement des logs d'erreurs");
+            Console.WriteLine($"Erreur lors du chargement des logs d'erreurs : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Sauvegarde les logs d'erreurs dans le fichier
+    /// </summary>
+    private void SaveErrorLogs()
+    {
+        try
+        {
+            var lines = new List<string>();
+            
+            foreach (var log in errorLogs)
+            {
+                lines.Add(log.ClientId);
+                lines.Add(log.Timestamp.ToString("O")); // Format ISO 8601
+                lines.Add(log.ErrorMessage);
+                lines.Add(log.StackTrace);
+            }
+            
+            File.WriteAllLines(ErrorLogFilePath, lines);
+            _logger.LogInformation($"Logs d'erreurs sauvegardés : {errorLogs.Count} erreur(s)");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de la sauvegarde des logs d'erreurs");
+            Console.WriteLine($"Erreur lors de la sauvegarde des logs d'erreurs : {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Récupère la liste des logs d'erreurs
+    /// </summary>
+    public List<CalibrationErrorLog> GetCalibrationErrorLogs()
+    {
+        return new List<CalibrationErrorLog>(errorLogs);
+    }
+    
+    /// <summary>
+    /// Efface tous les logs d'erreurs
+    /// </summary>
+    public void ClearCalibrationErrorLogs()
+    {
+        try
+        {
+            errorLogs.Clear();
+            
+            if (File.Exists(ErrorLogFilePath))
+            {
+                File.Delete(ErrorLogFilePath);
+            }
+            
+            _logger.LogInformation("Tous les logs d'erreurs ont été effacés");
+            Console.WriteLine("Tous les logs d'erreurs ont été effacés");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur lors de l'effacement des logs d'erreurs");
+            Console.WriteLine($"Erreur lors de l'effacement des logs d'erreurs : {ex.Message}");
         }
     }
 
