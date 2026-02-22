@@ -62,6 +62,10 @@
                             </Items>
                         </RadzenRadioButtonList>
                         
+                        <p class="gauge-description">
+                            Changer le mode de calibration influe parfois sur la qualité des données. N'hésitez pas à tester les différents modes lors des traitements ou retraitements.
+                        </p>
+                        
                         <h3 class="status-title" style="margin-top: 2rem;">Jauge de calibration</h3>
                         <div class="gauge-config-container">
                             <RadzenCheckBox @bind-Value=@enableCalibrationGauge 
@@ -396,7 +400,8 @@
                                                       TextProperty="Text"
                                                       ValueProperty="Value"
                                                       TValue="int"
-                                                      class="form-input" />
+                                                      class="form-input"
+                                                      Style="width: 100%; min-width: 250px;" />
                                     </ChildContent>
                                     <Helper>
                                         <RadzenRequiredValidator Component="Theme" Text="Champ obligatoire." />
@@ -1298,7 +1303,6 @@
         width: 100%;
         border-radius: 8px;
         border: 1px solid #ddd;
-        padding: 0.8rem;
         font-size: 1rem;
         transition: border 0.3s ease;
     }
